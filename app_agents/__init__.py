@@ -1,3 +1,3 @@
-from .team import create_manager_agent
+from .team import MANAGER_SYSTEM_PROMPT, REVIEW_SYSTEM_PROMPT
 
-__all__ = ["create_manager_agent"]
+__all__ = ["MANAGER_SYSTEM_PROMPT", "REVIEW_SYSTEM_PROMPT"]
