@@ -7,7 +7,7 @@ from aiogram import Bot, Dispatcher, F, types
 from aiogram.filters import Command, CommandStart
 from agents import Runner
 
-from agents.team import create_manager_agent
+from app_agents.team import create_manager_agent
 from config import load_settings
 from services.project_store import ProjectStore
 
