@@ -2,6 +2,7 @@ import asyncio
 import logging
 import os
 
+from aiohttp import web
 from aiogram import Bot, Dispatcher, F, types
 from aiogram.filters import Command, CommandStart
 from agents import Runner
@@ -139,9 +140,32 @@ async def text_handler(message: types.Message) -> None:
     )
 
 
+async def health_handler(_: web.Request) -> web.Response:
+    return web.json_response({"status": "ok", "service": "ios-agent-bot"})
+
+
+async def start_health_server() -> web.AppRunner:
+    app = web.Application()
+    app.router.add_get("/", health_handler)
+    app.router.add_get("/health", health_handler)
+
+    runner = web.AppRunner(app)
+    await runner.setup()
+    port = int(os.getenv("PORT", "3000"))
+    site = web.TCPSite(runner, "0.0.0.0", port)
+    await site.start()
+    logging.info("Health server started on port %s", port)
+    return runner
+
+
 async def main() -> None:
-    await bot.delete_webhook(drop_pending_updates=True)
-    await dp.start_polling(bot)
+    health_runner = await start_health_server()
+    try:
+        await bot.delete_webhook(drop_pending_updates=True)
+        await dp.start_polling(bot)
+    finally:
+        await health_runner.cleanup()
+        await bot.session.close()
 
 
 if __name__ == "__main__":
