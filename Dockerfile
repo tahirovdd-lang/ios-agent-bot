@@ -12,6 +12,11 @@ RUN pip install --no-cache-dir --upgrade pip \
 
 COPY . .
 
+# Bothost may reuse Docker layers from an older build where the project had
+# a local /app/agents package. It shadows the OpenAI Agents SDK package.
+RUN rm -rf /app/agents \
+    && python -c "from agents import Agent, Runner; print('OpenAI Agents SDK import OK')"
+
 EXPOSE 3000
 
 CMD ["python", "bot.py"]
