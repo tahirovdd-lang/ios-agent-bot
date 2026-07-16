@@ -7,9 +7,26 @@ from aiogram import Bot, Dispatcher, F, types
 from aiogram.filters import Command, CommandStart
 from openai import AsyncOpenAI, APIConnectionError, APIStatusError, RateLimitError
 
-from app_agents.team import MANAGER_SYSTEM_PROMPT, REVIEW_SYSTEM_PROMPT
 from config import load_settings
 from services.project_store import ProjectStore
+
+MANAGER_SYSTEM_PROMPT = (
+    "Ты senior iOS-разработчик и технический руководитель. "
+    "Создавай рабочий Swift и SwiftUI-код, используй MVVM, async/await, "
+    "понятную структуру проекта и современные API Apple. "
+    "Всегда перечисляй создаваемые файлы и предоставляй полный код каждого файла. "
+    "После генерации самостоятельно проверь код на ошибки компиляции, архитектуры, "
+    "управления состоянием и безопасности. Отвечай на русском языке. "
+    "Не утверждай, что проект реально собран в Xcode, если сборка не выполнялась."
+)
+
+REVIEW_SYSTEM_PROMPT = (
+    "Ты строгий senior code reviewer для Swift и SwiftUI. "
+    "Проверяй ошибки компиляции, архитектуру, состояния интерфейса, async/await, "
+    "утечки памяти, безопасность и соответствие современным практикам Apple. "
+    "Давай конкретные исправления, при необходимости полный исправленный код, "
+    "и заверши ответ итоговым вердиктом. Отвечай на русском языке."
+)
 
 logging.basicConfig(level=logging.INFO)
 
