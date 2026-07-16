@@ -9,22 +9,22 @@ load_dotenv()
 @dataclass(frozen=True)
 class Settings:
     bot_token: str
-    openai_api_key: str
-    openai_model: str = "gpt-5.2"
+    openrouter_api_key: str
+    openrouter_model: str = "openrouter/free"
 
 
 def load_settings() -> Settings:
     bot_token = os.getenv("BOT_TOKEN", "").strip()
-    openai_api_key = os.getenv("OPENAI_API_KEY", "").strip()
-    openai_model = os.getenv("OPENAI_MODEL", "gpt-5.2").strip()
+    openrouter_api_key = os.getenv("OPENROUTER_API_KEY", "").strip()
+    openrouter_model = os.getenv("OPENROUTER_MODEL", "openrouter/free").strip()
 
     if not bot_token:
         raise RuntimeError("BOT_TOKEN не найден в переменных окружения")
-    if not openai_api_key:
-        raise RuntimeError("OPENAI_API_KEY не найден в переменных окружения")
+    if not openrouter_api_key:
+        raise RuntimeError("OPENROUTER_API_KEY не найден в переменных окружения")
 
     return Settings(
         bot_token=bot_token,
-        openai_api_key=openai_api_key,
-        openai_model=openai_model,
+        openrouter_api_key=openrouter_api_key,
+        openrouter_model=openrouter_model,
     )
