@@ -11,21 +11,25 @@ from config import load_settings
 from services.project_store import ProjectStore
 
 MANAGER_SYSTEM_PROMPT = (
-    "Ты senior iOS-разработчик и технический руководитель. "
-    "Создавай рабочий Swift и SwiftUI-код, используй MVVM, async/await, "
-    "понятную структуру проекта и современные API Apple. "
-    "Всегда перечисляй создаваемые файлы и предоставляй полный код каждого файла. "
-    "После генерации самостоятельно проверь код на ошибки компиляции, архитектуры, "
-    "управления состоянием и безопасности. Отвечай на русском языке. "
-    "Не утверждай, что проект реально собран в Xcode, если сборка не выполнялась."
+    "Ты — Senior iOS Engineer и Software Architect с опытом коммерческой разработки более 15 лет. "
+    "Создавай полноценные, логически завершённые и компилируемые iOS-проекты для Xcode на Swift и SwiftUI. "
+    "Запрещено ссылаться на несуществующие классы, ViewModel, Model, Service, View, методы, свойства, "
+    "изображения и зависимости. Перед выводом результата проведи внутреннюю проверку импортов, типов, "
+    "инициализаторов, Binding, State, StateObject, EnvironmentObject, async/await и маршрутов навигации. "
+    "Возвращай полный проект без пропусков, псевдокода и фраз вроде 'остальной код аналогичен'. "
+    "Если проект большой, продолжай последовательно до завершения всех файлов. Используй Swift 5.9+, "
+    "SwiftUI, MVVM, NavigationStack и современные API Apple. Для финансовых значений предпочитай Decimal. "
+    "Всегда перечисляй дерево файлов и предоставляй полный код каждого файла отдельно. "
+    "Отвечай на русском языке. Не утверждай, что проект реально собран в Xcode, если сборка не выполнялась."
 )
 
 REVIEW_SYSTEM_PROMPT = (
     "Ты строгий senior code reviewer для Swift и SwiftUI. "
-    "Проверяй ошибки компиляции, архитектуру, состояния интерфейса, async/await, "
+    "Проверяй только подтверждённые кодом ошибки компиляции, архитектуру, состояния интерфейса, async/await, "
     "утечки памяти, безопасность и соответствие современным практикам Apple. "
-    "Давай конкретные исправления, при необходимости полный исправленный код, "
-    "и заверши ответ итоговым вердиктом. Отвечай на русском языке."
+    "Отделяй реальные ошибки от рекомендаций. Если часть файлов не предоставлена, прямо указывай, "
+    "что вывод требует проверки остальных файлов. Давай конкретные исправления и итоговый вердикт. "
+    "Отвечай на русском языке."
 )
 
 logging.basicConfig(level=logging.INFO)
@@ -82,6 +86,26 @@ async def show_ai_error(status: types.Message, exc: Exception) -> None:
     await status.edit_text(text)
 
 
+def save_requirements_text(user_id: int, text: str, append: bool = False):
+    project = store.get(user_id)
+    if project is None:
+        return None
+
+    if append and project.requirements:
+        project.requirements = (
+            project.requirements.rstrip()
+            + "\n\nДополнительные требования:\n"
+            + text.strip()
+        )
+    else:
+        project.requirements = text.strip()
+
+    project.generated_code = ""
+    project.review = ""
+    store.save(project)
+    return project
+
+
 @dp.message(CommandStart())
 async def start_handler(message: types.Message) -> None:
     await message.answer(
@@ -92,7 +116,7 @@ async def start_handler(message: types.Message) -> None:
         "/status — показать состояние проекта\n"
         "/generate — подготовить SwiftUI-код\n"
         "/review — проверить созданный код\n\n"
-        "Начните с команды: /newproject Название приложения"
+        "После создания проекта требования можно отправлять обычным текстом без команды."
     )
 
 
@@ -105,8 +129,8 @@ async def new_project_handler(message: types.Message) -> None:
 
     project = store.create(message.from_user.id, name)
     await message.answer(
-        f"✅ Проект «{project.name}» создан.\n"
-        "Теперь отправьте требования командой /requirements"
+        f"✅ Проект «{project.name}» создан.\n\n"
+        "Теперь отправьте требования обычным сообщением или командой /requirements Текст"
     )
 
 
@@ -119,13 +143,12 @@ async def requirements_handler(message: types.Message) -> None:
 
     requirements = (message.text or "").partition(" ")[2].strip()
     if not requirements:
-        await message.answer("После команды добавьте описание приложения.")
+        await message.answer(
+            "📝 Отправьте требования следующим обычным сообщением без команды."
+        )
         return
 
-    project.requirements = requirements
-    project.generated_code = ""
-    project.review = ""
-    store.save(project)
+    save_requirements_text(message.from_user.id, requirements)
     await message.answer("✅ Требования сохранены. Для генерации используйте /generate")
 
 
@@ -156,8 +179,8 @@ async def generate_handler(message: types.Message) -> None:
     prompt = (
         f"Проект: {project.name}\n"
         f"Требования: {project.requirements}\n\n"
-        "Создай первую рабочую MVP-версию. Перечисли файлы и дай полный код. "
-        "После этого обязательно выполни code review."
+        "Создай полноценную рабочую MVP-версию. Перечисли дерево файлов и дай полный код каждого файла. "
+        "Перед выводом проверь зависимости и отсутствие ссылок на несуществующие типы."
     )
 
     try:
@@ -194,9 +217,33 @@ async def review_handler(message: types.Message) -> None:
 
 @dp.message(F.text)
 async def text_handler(message: types.Message) -> None:
-    await message.answer(
-        "Используйте команды /newproject, /requirements, /status, /generate или /review."
-    )
+    text = (message.text or "").strip()
+
+    if not text:
+        return
+
+    if text.startswith("/"):
+        await message.answer("❌ Неизвестная команда. Используйте /start для списка команд.")
+        return
+
+    project = store.get(message.from_user.id)
+    if project is None:
+        await message.answer(
+            "Сначала создайте проект командой:\n/newproject НазваниеПроекта"
+        )
+        return
+
+    append = bool(project.requirements)
+    save_requirements_text(message.from_user.id, text, append=append)
+
+    if append:
+        await message.answer(
+            "✅ Дополнительное требование добавлено. Для новой генерации используйте /generate"
+        )
+    else:
+        await message.answer(
+            "✅ Требования сохранены. Для генерации используйте /generate"
+        )
 
 
 async def health_handler(_: web.Request) -> web.Response:
