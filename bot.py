@@ -1,7 +1,9 @@
 import asyncio
+import json
 import logging
 import os
 from collections import Counter
+from typing import Any
 
 from aiohttp import web
 from aiogram import Bot, Dispatcher, F, types
@@ -31,59 +33,91 @@ def repetitive(text: str) -> bool:
     return len(counts) / len(lines) < 0.55 or counts.most_common(1)[0][1] >= 5
 
 
-def response_text(response) -> str:
-    """Извлекает текст даже в версиях SDK, где output_text пустой."""
+def _as_dict(value: Any) -> Any:
+    if isinstance(value, dict):
+        return value
+    if isinstance(value, list):
+        return [_as_dict(item) for item in value]
+    model_dump = getattr(value, "model_dump", None)
+    if callable(model_dump):
+        try:
+            return model_dump(mode="json")
+        except TypeError:
+            return model_dump()
+    return value
+
+
+def response_text(response: Any) -> str:
+    """Надёжно извлекает output_text из разных версий OpenAI SDK."""
     direct = getattr(response, "output_text", None)
     if isinstance(direct, str) and direct.strip():
         return direct.strip()
 
-    parts: list[str] = []
-    for output_item in getattr(response, "output", None) or []:
-        for content_item in getattr(output_item, "content", None) or []:
-            item_type = getattr(content_item, "type", "")
-            value = getattr(content_item, "text", None)
-            if item_type == "output_text" and isinstance(value, str) and value.strip():
-                parts.append(value.strip())
-                continue
+    data = _as_dict(response)
+    if not isinstance(data, dict):
+        return ""
 
-            refusal = getattr(content_item, "refusal", None)
-            if item_type == "refusal" and isinstance(refusal, str) and refusal.strip():
-                parts.append(f"OpenAI отказался выполнить запрос: {refusal.strip()}")
+    direct = data.get("output_text")
+    if isinstance(direct, str) and direct.strip():
+        return direct.strip()
+
+    parts: list[str] = []
+    for output_item in data.get("output") or []:
+        if not isinstance(output_item, dict):
+            continue
+        for content_item in output_item.get("content") or []:
+            if not isinstance(content_item, dict):
+                continue
+            item_type = content_item.get("type")
+            if item_type == "output_text":
+                value = content_item.get("text")
+                if isinstance(value, str) and value.strip():
+                    parts.append(value.strip())
+            elif item_type == "refusal":
+                refusal = content_item.get("refusal")
+                if isinstance(refusal, str) and refusal.strip():
+                    parts.append(f"OpenAI отказался выполнить запрос: {refusal.strip()}")
 
     return "\n".join(parts).strip()
 
 
 async def ask(prompt: str, task: str, model: str, max_tokens: int) -> str:
     status = "unknown"
-    for attempt in range(3):
-        suffix = "" if attempt == 0 else "\n\nВерни только полный финальный ответ обычным текстом."
+    for attempt in range(2):
+        suffix = "" if attempt == 0 else "\n\nВерни финальный ответ обычным текстом без служебных сообщений."
         response = await client.responses.create(
             model=model,
             instructions=prompt,
             input=task + suffix,
             max_output_tokens=max_tokens,
             reasoning={"effort": "low"},
-            text={"format": {"type": "text"}},
         )
         status = str(getattr(response, "status", "unknown"))
         text = response_text(response)
         if text and not repetitive(text):
             return text
 
-        output_types = [
-            str(getattr(item, "type", "unknown"))
-            for item in (getattr(response, "output", None) or [])
-        ]
+        data = _as_dict(response)
+        safe_debug = {
+            "id": data.get("id") if isinstance(data, dict) else None,
+            "status": data.get("status") if isinstance(data, dict) else status,
+            "output": data.get("output") if isinstance(data, dict) else None,
+            "incomplete_details": data.get("incomplete_details") if isinstance(data, dict) else None,
+            "error": data.get("error") if isinstance(data, dict) else None,
+        }
         logger.warning(
-            "Empty/repetitive OpenAI response model=%s attempt=%s status=%s request_id=%s output_types=%s",
+            "OpenAI response has no usable text model=%s attempt=%s data=%s",
             model,
             attempt + 1,
-            status,
-            getattr(response, "_request_id", "unknown"),
-            output_types,
+            json.dumps(safe_debug, ensure_ascii=False, default=str)[:12000],
         )
-        await asyncio.sleep(2 * (attempt + 1))
-    raise RuntimeError(f"Модель {model} завершила запрос, но текст ответа не найден. Статус: {status}")
+        await asyncio.sleep(2)
+
+    raise RuntimeError(
+        f"Модель {model} завершила запрос, но текст ответа не найден. "
+        "Проверьте новую строку OpenAI response has no usable text в логах. "
+        f"Статус: {status}"
+    )
 
 
 async def send_long(message: types.Message, text: str) -> None:
