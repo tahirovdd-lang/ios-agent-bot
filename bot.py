@@ -11,125 +11,10 @@ from openai import AsyncOpenAI, APIConnectionError, APIStatusError, RateLimitErr
 from config import load_settings
 from services.project_store import ProjectStore
 
-MANAGER_SYSTEM_PROMPT = (
-    "Ты — Senior iOS Engineer и Software Architect с опытом коммерческой разработки более 15 лет. "
-    "Создавай полноценные, логически завершённые iOS-проекты для Xcode на Swift и SwiftUI. "
-    "Запрещено ссылаться на несуществующие классы, ViewModel, Model, Service, View, методы, свойства, "
-    "изображения и зависимости. Перед выводом результата проведи внутреннюю проверку импортов, типов, "
-    "инициализаторов, Binding, State, StateObject, EnvironmentObject, async/await и маршрутов навигации. "
-    "Возвращай полный проект без пропусков, псевдокода и фраз вроде 'остальной код аналогичен'. "
-    "Если проект большой, продолжай последовательно до завершения всех файлов. Используй Swift 5.9+, "
-    "SwiftUI, MVVM, NavigationStack и современные API Apple. Для финансовых значений предпочитай Decimal. "
-    "Всегда перечисляй дерево файлов и предоставляй полный код каждого файла отдельно. "
-    "Отвечай на русском языке. Не утверждай, что проект реально собран в Xcode, если сборка не выполнялась."
-)
-
-REVIEW_SYSTEM_PROMPT = """
-Ты — Principal iOS Engineer и Senior Code Reviewer с опытом более 15 лет.
-Проводи максимально строгий аудит предоставленного Swift-проекта.
-
-ГЛАВНОЕ ПРАВИЛО
-Не предполагай, не додумывай и не фантазируй.
-Если чего-то нет в предоставленном коде, прямо так и напиши.
-Никогда не утверждай, что проект компилируется или успешно запускается, если фактическая сборка не выполнялась.
-Каждое замечание должно опираться на конкретный фрагмент предоставленного кода.
-
-ЗАПРЕЩЕНО В ОТВЕТЕ
-- Не показывай внутренний план анализа или скрытые рассуждения.
-- Не пиши фразы вида “We need to ensure...”, “I need to check...” и похожие служебные заметки.
-- Не повторяй одинаковые строки, требования, выводы или замечания.
-- Не придумывай отсутствующие файлы, типы, зависимости и номера строк.
-- Не называй архитектурную рекомендацию критической ошибкой.
-
-КАТЕГОРИИ ПРОВЕРКИ
-
-1. Критические ошибки
-Включай только подтверждённые кодом проблемы, которые приводят к:
-- ошибке компиляции;
-- крашу;
-- бесконечному циклу;
-- утечке памяти;
-- нарушению логики приложения;
-- невозможности запуска.
-Не включай сюда архитектурные советы.
-
-2. Возможные проблемы
-Указывай только то, что действительно может вызвать проблему.
-Когда вывод зависит от файлов, которых нет в предоставленном коде, обязательно напиши:
-“Требуется проверить остальные файлы проекта.”
-
-3. Архитектурные замечания
-Проверяй MVVM, Dependency Injection, SOLID, Clean Architecture, Repository, Coordinator,
-SwiftData и CoreData только тогда, когда соответствующий подход действительно используется в коде.
-Не навязывай Clean Architecture и не предлагай масштабную перестройку без подтверждённой необходимости.
-
-4. Стиль и корректность Swift
-Проверяй Swift API Design Guidelines, naming, access control, mutability, let/var,
-@MainActor, async/await, Task, cancellation и memory management.
-
-5. Производительность
-Проверяй LazyVGrid, LazyVStack, Image, NavigationStack, ObservableObject, StateObject,
-EnvironmentObject, SwiftData и CoreData только в местах, где они реально присутствуют.
-
-6. Безопасность
-Проверяй Keychain, UserDefaults, PII, пароли, токены и API-ключи только при их наличии в коде.
-
-ПРОВЕРКА КОМПИЛЯЦИИ
-Перед каждым замечанием проверь, есть ли прямое подтверждение в предоставленном коде.
-Если подтверждения нет, не заявляй ошибку как факт.
-
-Неправильно:
-“ProductCard отсутствует.”
-
-Правильно:
-“В предоставленных файлах ProductCard не найден. Если он отсутствует в проекте — возникнет ошибка компиляции. Требуется проверить остальные файлы проекта.”
-
-ФОРМАТ ОТВЕТА
-Раздели результат на разделы:
-- Критические ошибки
-- Возможные проблемы
-- Архитектурные замечания
-- Стиль кода
-- Производительность
-- Безопасность
-
-Для каждого найденного замечания используй таблицу:
-| Severity | Файл | Строка | Проблема | Исправление |
-
-Допустимые Severity:
-Critical, Major, Minor, Info.
-
-Если точный номер строки невозможно определить из предоставленного текста, напиши “не указана”.
-Не придумывай номер строки.
-Если в категории нет подтверждённых замечаний, напиши: “Подтверждённых замечаний не обнаружено.”
-
-После каждой таблицы покажи только минимально необходимый исправленный фрагмент кода.
-Не переписывай файл полностью, если достаточно изменить несколько строк.
-
-ИТОГ
-В конце обязательно выведи:
-Критических ошибок: X
-Потенциальных проблем: X
-Архитектурных рекомендаций: X
-Ошибок компиляции, подтвержденных кодом: X
-Ошибок компиляции, требующих проверки остальных файлов: X
-
-Степень готовности проекта:
-🟥 Не собирается — только при наличии подтверждённой ошибки компиляции или невозможности запуска.
-🟨 Требует исправлений — при подтверждённых проблемах без доказанной невозможности сборки.
-🟩 Готов к сборке — только если предоставлены все необходимые файлы и подтверждённых препятствий не найдено; это не означает, что сборка реально выполнена.
-
-Если предоставлены не все файлы, обязательно напиши:
-“Невозможно подтвердить готовность проекта, поскольку предоставлены не все файлы.”
-
-Перед отправкой ответа проверь, что одинаковые предложения и абзацы не повторяются.
-Отвечай только на русском языке.
-""".strip()
-
 logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 settings = load_settings()
-
 bot = Bot(token=settings.bot_token)
 dp = Dispatcher()
 store = ProjectStore()
@@ -143,68 +28,142 @@ openrouter_client = AsyncOpenAI(
     },
 )
 
+MANAGER_SYSTEM_PROMPT = """
+Ты — Senior iOS Engineer и Software Architect с опытом коммерческой разработки более 15 лет.
+Создавай полноценные, логически завершённые iOS-проекты для Xcode на Swift 5.9+ и SwiftUI.
+Используй MVVM, NavigationStack, async/await и современные API Apple.
+Для финансовых значений используй Decimal.
+Не используй force unwrap, псевдокод, TODO и фразы «остальной код аналогичен».
+Не ссылайся на несуществующие типы, методы, свойства, изображения или зависимости.
+Сначала покажи дерево файлов, затем полный код каждого файла отдельно.
+Перед ответом проверь импорты, типы, инициализаторы, Binding, State, StateObject,
+EnvironmentObject, async/await и маршруты навигации.
+Отвечай только на русском языке.
+Не утверждай, что проект собран в Xcode, если сборка не выполнялась.
+""".strip()
+
+REVIEW_SYSTEM_PROMPT = """
+Ты — Principal iOS Engineer и Senior Code Reviewer.
+Проведи строгое ревью только предоставленного Swift-кода.
+Не придумывай отсутствующие файлы, типы, зависимости и номера строк.
+Не показывай внутренние рассуждения и не пиши служебные фразы вроде «We need to ensure».
+Не повторяй одинаковые предложения или замечания.
+
+Разделы ответа:
+1. Критические ошибки
+2. Возможные проблемы
+3. Архитектурные замечания
+4. Стиль кода
+5. Производительность
+6. Безопасность
+
+Для замечаний используй таблицу:
+| Severity | Файл | Строка | Проблема | Исправление |
+Severity: Critical, Major, Minor, Info.
+Если строка неизвестна, укажи «не указана».
+Если замечаний нет, напиши «Подтверждённых замечаний не обнаружено.»
+Не утверждай, что проект компилируется, если сборка не выполнялась.
+В конце выведи количество критических ошибок, потенциальных проблем,
+архитектурных рекомендаций и степень готовности проекта.
+Отвечай только на русском языке.
+""".strip()
+
 
 def has_excessive_repetition(text: str) -> bool:
     lines = [line.strip() for line in text.splitlines() if line.strip()]
     if len(lines) < 20:
         return False
-
     counts = Counter(lines)
-    repeated_line_count = sum(count - 1 for count in counts.values() if count > 1)
+    repeated = sum(count - 1 for count in counts.values() if count > 1)
     unique_ratio = len(counts) / len(lines)
-    most_common_count = counts.most_common(1)[0][1]
+    most_common = counts.most_common(1)[0][1]
+    return unique_ratio < 0.55 or repeated >= 10 or most_common >= 5
 
-    return (
-        unique_ratio < 0.55
-        or repeated_line_count >= 10
-        or most_common_count >= 5
-    )
+
+def extract_message_text(message) -> str:
+    """Extract final answer text without exposing hidden reasoning."""
+    content = getattr(message, "content", None)
+    if isinstance(content, str):
+        return content.strip()
+    if isinstance(content, list):
+        parts: list[str] = []
+        for item in content:
+            if isinstance(item, dict):
+                text = item.get("text") or item.get("content")
+            else:
+                text = getattr(item, "text", None) or getattr(item, "content", None)
+            if text:
+                parts.append(str(text))
+        return "\n".join(parts).strip()
+    return ""
 
 
 async def request_ai(system_prompt: str, user_prompt: str) -> str:
-    retry_instruction = (
-        "\n\nВАЖНО: предыдущая попытка содержала чрезмерные повторы. "
-        "Сформируй ответ заново, без повторяющихся строк и без внутреннего плана анализа."
-    )
+    last_finish_reason = "неизвестно"
 
-    for attempt in range(2):
-        current_user_prompt = user_prompt
-        if attempt == 1:
-            current_user_prompt += retry_instruction
+    for attempt in range(3):
+        prompt = user_prompt
+        if attempt:
+            prompt += (
+                "\n\nПредыдущая попытка не вернула готовый ответ. "
+                "Верни только полный финальный результат обычным текстом, без скрытого плана анализа."
+            )
 
         response = await openrouter_client.chat.completions.create(
             model=settings.openrouter_model,
             messages=[
                 {"role": "system", "content": system_prompt},
-                {"role": "user", "content": current_user_prompt},
+                {"role": "user", "content": prompt},
             ],
             temperature=0.1,
-            max_tokens=8000,
+            max_tokens=12000,
+            extra_body={
+                "reasoning": {
+                    "effort": "low",
+                    "exclude": True,
+                }
+            },
         )
 
-        content = response.choices[0].message.content
+        if not response.choices:
+            logger.warning("OpenRouter returned no choices, attempt %s", attempt + 1)
+            await asyncio.sleep(2 * (attempt + 1))
+            continue
+
+        choice = response.choices[0]
+        last_finish_reason = str(getattr(choice, "finish_reason", "неизвестно"))
+        content = extract_message_text(choice.message)
+
         if not content:
-            raise RuntimeError("Модель вернула пустой ответ")
+            logger.warning(
+                "OpenRouter returned empty content, attempt %s, finish_reason=%s",
+                attempt + 1,
+                last_finish_reason,
+            )
+            await asyncio.sleep(2 * (attempt + 1))
+            continue
 
-        content = content.strip()
-        if not has_excessive_repetition(content):
-            return content
+        if has_excessive_repetition(content):
+            logger.warning("OpenRouter returned repetitive content, attempt %s", attempt + 1)
+            await asyncio.sleep(2 * (attempt + 1))
+            continue
 
-        logging.warning("AI returned repetitive content, attempt %s", attempt + 1)
+        return content
 
     raise RuntimeError(
-        "Модель дважды вернула зацикленный ответ. Повторите запрос позже или выберите другую модель."
+        "Модель трижды не вернула готовый текст. "
+        f"Последняя причина завершения: {last_finish_reason}. "
+        "Повторите /generate позже или временно выберите другую модель."
     )
 
 
 async def send_long(message: types.Message, text: str) -> None:
-    for start in range(0, len(text), 4000):
-        await message.answer(text[start : start + 4000])
+    for start in range(0, len(text), 3900):
+        await message.answer(text[start : start + 3900])
 
 
 async def show_ai_error(status: types.Message, exc: Exception) -> None:
-    logging.exception("AI request failed")
-
+    logger.exception("AI request failed")
     if isinstance(exc, RateLimitError):
         text = "❌ OpenRouter временно ограничил запрос. Повторите немного позже."
     elif isinstance(exc, APIConnectionError):
@@ -215,7 +174,6 @@ async def show_ai_error(status: types.Message, exc: Exception) -> None:
         text = f"❌ {exc}"
     else:
         text = f"❌ Ошибка генерации: {type(exc).__name__}"
-
     await status.edit_text(text)
 
 
@@ -223,7 +181,6 @@ def save_requirements_text(user_id: int, text: str, append: bool = False):
     project = store.get(user_id)
     if project is None:
         return None
-
     if append and project.requirements:
         project.requirements = (
             project.requirements.rstrip()
@@ -232,7 +189,6 @@ def save_requirements_text(user_id: int, text: str, append: bool = False):
         )
     else:
         project.requirements = text.strip()
-
     project.generated_code = ""
     project.review = ""
     store.save(project)
@@ -242,14 +198,14 @@ def save_requirements_text(user_id: int, text: str, append: bool = False):
 @dp.message(CommandStart())
 async def start_handler(message: types.Message) -> None:
     await message.answer(
-        "👋 Я команда ИИ-агентов для разработки iPhone-приложений.\n\n"
+        "👋 Я ИИ-помощник для разработки iPhone-приложений.\n\n"
         "Команды:\n"
         "/newproject Название — создать проект\n"
         "/requirements Текст — сохранить требования\n"
-        "/status — показать состояние проекта\n"
-        "/generate — подготовить SwiftUI-код\n"
+        "/status — состояние проекта\n"
+        "/generate — создать SwiftUI-код\n"
         "/review — проверить созданный код\n\n"
-        "После создания проекта требования можно отправлять обычным текстом без команды."
+        "После создания проекта требования можно отправлять обычным сообщением."
     )
 
 
@@ -257,9 +213,8 @@ async def start_handler(message: types.Message) -> None:
 async def new_project_handler(message: types.Message) -> None:
     name = (message.text or "").partition(" ")[2].strip()
     if not name:
-        await message.answer("Укажите название: /newproject Kolibri App")
+        await message.answer("Укажите название: /newproject CaseonePOS")
         return
-
     project = store.create(message.from_user.id, name)
     await message.answer(
         f"✅ Проект «{project.name}» создан.\n\n"
@@ -273,14 +228,10 @@ async def requirements_handler(message: types.Message) -> None:
     if project is None:
         await message.answer("Сначала создайте проект: /newproject Название")
         return
-
     requirements = (message.text or "").partition(" ")[2].strip()
     if not requirements:
-        await message.answer(
-            "📝 Отправьте требования следующим обычным сообщением без команды."
-        )
+        await message.answer("📝 Отправьте требования следующим обычным сообщением.")
         return
-
     save_requirements_text(message.from_user.id, requirements)
     await message.answer("✅ Требования сохранены. Для генерации используйте /generate")
 
@@ -291,7 +242,6 @@ async def status_handler(message: types.Message) -> None:
     if project is None:
         await message.answer("Активного проекта нет. Используйте /newproject")
         return
-
     await message.answer(
         f"📱 Проект: {project.name}\n"
         f"Требования: {'есть' if project.requirements else 'не добавлены'}\n"
@@ -312,15 +262,18 @@ async def generate_handler(message: types.Message) -> None:
     prompt = (
         f"Проект: {project.name}\n"
         f"Требования: {project.requirements}\n\n"
-        "Создай полноценную рабочую MVP-версию. Перечисли дерево файлов и дай полный код каждого файла. "
-        "Перед выводом проверь зависимости и отсутствие ссылок на несуществующие типы."
+        "Создай полноценную рабочую MVP-версию. Сначала перечисли дерево файлов, "
+        "затем дай полный код каждого файла. Проверь зависимости и отсутствие "
+        "ссылок на несуществующие типы."
     )
 
     try:
-        project.generated_code = await request_ai(MANAGER_SYSTEM_PROMPT, prompt)
+        generated = await request_ai(MANAGER_SYSTEM_PROMPT, prompt)
+        project.generated_code = generated
+        project.review = ""
         store.save(project)
         await status.delete()
-        await send_long(message, project.generated_code)
+        await send_long(message, generated)
     except Exception as exc:
         await show_ai_error(status, exc)
 
@@ -336,15 +289,16 @@ async def review_handler(message: types.Message) -> None:
     prompt = (
         f"Название проекта: {project.name}\n\n"
         "Проведи строгое ревью следующего SwiftUI-проекта. "
-        "Считай предоставленными только файлы и код, которые находятся ниже:\n\n"
+        "Считай предоставленными только файлы и код ниже:\n\n"
         + project.generated_code
     )
 
     try:
-        project.review = await request_ai(REVIEW_SYSTEM_PROMPT, prompt)
+        review = await request_ai(REVIEW_SYSTEM_PROMPT, prompt)
+        project.review = review
         store.save(project)
         await status.delete()
-        await send_long(message, project.review)
+        await send_long(message, review)
     except Exception as exc:
         await show_ai_error(status, exc)
 
@@ -352,32 +306,25 @@ async def review_handler(message: types.Message) -> None:
 @dp.message(F.text)
 async def text_handler(message: types.Message) -> None:
     text = (message.text or "").strip()
-
     if not text:
         return
-
     if text.startswith("/"):
-        await message.answer("❌ Неизвестная команда. Используйте /start для списка команд.")
+        await message.answer("❌ Неизвестная команда. Используйте /start.")
         return
 
     project = store.get(message.from_user.id)
     if project is None:
-        await message.answer(
-            "Сначала создайте проект командой:\n/newproject НазваниеПроекта"
-        )
+        await message.answer("Сначала создайте проект: /newproject НазваниеПроекта")
         return
 
     append = bool(project.requirements)
     save_requirements_text(message.from_user.id, text, append=append)
-
     if append:
         await message.answer(
             "✅ Дополнительное требование добавлено. Для новой генерации используйте /generate"
         )
     else:
-        await message.answer(
-            "✅ Требования сохранены. Для генерации используйте /generate"
-        )
+        await message.answer("✅ Требования сохранены. Для генерации используйте /generate")
 
 
 async def health_handler(_: web.Request) -> web.Response:
@@ -395,13 +342,12 @@ async def start_health_server() -> web.AppRunner:
     app = web.Application()
     app.router.add_get("/", health_handler)
     app.router.add_get("/health", health_handler)
-
     runner = web.AppRunner(app)
     await runner.setup()
     port = int(os.getenv("PORT", "3000"))
     site = web.TCPSite(runner, "0.0.0.0", port)
     await site.start()
-    logging.info("Health server started on port %s", port)
+    logger.info("Health server started on port %s", port)
     return runner
 
 
