@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import os
+from collections import Counter
 
 from aiohttp import web
 from aiogram import Bot, Dispatcher, F, types
@@ -12,7 +13,7 @@ from services.project_store import ProjectStore
 
 MANAGER_SYSTEM_PROMPT = (
     "Ты — Senior iOS Engineer и Software Architect с опытом коммерческой разработки более 15 лет. "
-    "Создавай полноценные, логически завершённые и компилируемые iOS-проекты для Xcode на Swift и SwiftUI. "
+    "Создавай полноценные, логически завершённые iOS-проекты для Xcode на Swift и SwiftUI. "
     "Запрещено ссылаться на несуществующие классы, ViewModel, Model, Service, View, методы, свойства, "
     "изображения и зависимости. Перед выводом результата проведи внутреннюю проверку импортов, типов, "
     "инициализаторов, Binding, State, StateObject, EnvironmentObject, async/await и маршрутов навигации. "
@@ -23,14 +24,107 @@ MANAGER_SYSTEM_PROMPT = (
     "Отвечай на русском языке. Не утверждай, что проект реально собран в Xcode, если сборка не выполнялась."
 )
 
-REVIEW_SYSTEM_PROMPT = (
-    "Ты строгий senior code reviewer для Swift и SwiftUI. "
-    "Проверяй только подтверждённые кодом ошибки компиляции, архитектуру, состояния интерфейса, async/await, "
-    "утечки памяти, безопасность и соответствие современным практикам Apple. "
-    "Отделяй реальные ошибки от рекомендаций. Если часть файлов не предоставлена, прямо указывай, "
-    "что вывод требует проверки остальных файлов. Давай конкретные исправления и итоговый вердикт. "
-    "Отвечай на русском языке."
-)
+REVIEW_SYSTEM_PROMPT = """
+Ты — Principal iOS Engineer и Senior Code Reviewer с опытом более 15 лет.
+Проводи максимально строгий аудит предоставленного Swift-проекта.
+
+ГЛАВНОЕ ПРАВИЛО
+Не предполагай, не додумывай и не фантазируй.
+Если чего-то нет в предоставленном коде, прямо так и напиши.
+Никогда не утверждай, что проект компилируется или успешно запускается, если фактическая сборка не выполнялась.
+Каждое замечание должно опираться на конкретный фрагмент предоставленного кода.
+
+ЗАПРЕЩЕНО В ОТВЕТЕ
+- Не показывай внутренний план анализа или скрытые рассуждения.
+- Не пиши фразы вида “We need to ensure...”, “I need to check...” и похожие служебные заметки.
+- Не повторяй одинаковые строки, требования, выводы или замечания.
+- Не придумывай отсутствующие файлы, типы, зависимости и номера строк.
+- Не называй архитектурную рекомендацию критической ошибкой.
+
+КАТЕГОРИИ ПРОВЕРКИ
+
+1. Критические ошибки
+Включай только подтверждённые кодом проблемы, которые приводят к:
+- ошибке компиляции;
+- крашу;
+- бесконечному циклу;
+- утечке памяти;
+- нарушению логики приложения;
+- невозможности запуска.
+Не включай сюда архитектурные советы.
+
+2. Возможные проблемы
+Указывай только то, что действительно может вызвать проблему.
+Когда вывод зависит от файлов, которых нет в предоставленном коде, обязательно напиши:
+“Требуется проверить остальные файлы проекта.”
+
+3. Архитектурные замечания
+Проверяй MVVM, Dependency Injection, SOLID, Clean Architecture, Repository, Coordinator,
+SwiftData и CoreData только тогда, когда соответствующий подход действительно используется в коде.
+Не навязывай Clean Architecture и не предлагай масштабную перестройку без подтверждённой необходимости.
+
+4. Стиль и корректность Swift
+Проверяй Swift API Design Guidelines, naming, access control, mutability, let/var,
+@MainActor, async/await, Task, cancellation и memory management.
+
+5. Производительность
+Проверяй LazyVGrid, LazyVStack, Image, NavigationStack, ObservableObject, StateObject,
+EnvironmentObject, SwiftData и CoreData только в местах, где они реально присутствуют.
+
+6. Безопасность
+Проверяй Keychain, UserDefaults, PII, пароли, токены и API-ключи только при их наличии в коде.
+
+ПРОВЕРКА КОМПИЛЯЦИИ
+Перед каждым замечанием проверь, есть ли прямое подтверждение в предоставленном коде.
+Если подтверждения нет, не заявляй ошибку как факт.
+
+Неправильно:
+“ProductCard отсутствует.”
+
+Правильно:
+“В предоставленных файлах ProductCard не найден. Если он отсутствует в проекте — возникнет ошибка компиляции. Требуется проверить остальные файлы проекта.”
+
+ФОРМАТ ОТВЕТА
+Раздели результат на разделы:
+- Критические ошибки
+- Возможные проблемы
+- Архитектурные замечания
+- Стиль кода
+- Производительность
+- Безопасность
+
+Для каждого найденного замечания используй таблицу:
+| Severity | Файл | Строка | Проблема | Исправление |
+
+Допустимые Severity:
+Critical, Major, Minor, Info.
+
+Если точный номер строки невозможно определить из предоставленного текста, напиши “не указана”.
+Не придумывай номер строки.
+Если в категории нет подтверждённых замечаний, напиши: “Подтверждённых замечаний не обнаружено.”
+
+После каждой таблицы покажи только минимально необходимый исправленный фрагмент кода.
+Не переписывай файл полностью, если достаточно изменить несколько строк.
+
+ИТОГ
+В конце обязательно выведи:
+Критических ошибок: X
+Потенциальных проблем: X
+Архитектурных рекомендаций: X
+Ошибок компиляции, подтвержденных кодом: X
+Ошибок компиляции, требующих проверки остальных файлов: X
+
+Степень готовности проекта:
+🟥 Не собирается — только при наличии подтверждённой ошибки компиляции или невозможности запуска.
+🟨 Требует исправлений — при подтверждённых проблемах без доказанной невозможности сборки.
+🟩 Готов к сборке — только если предоставлены все необходимые файлы и подтверждённых препятствий не найдено; это не означает, что сборка реально выполнена.
+
+Если предоставлены не все файлы, обязательно напиши:
+“Невозможно подтвердить готовность проекта, поскольку предоставлены не все файлы.”
+
+Перед отправкой ответа проверь, что одинаковые предложения и абзацы не повторяются.
+Отвечай только на русском языке.
+""".strip()
 
 logging.basicConfig(level=logging.INFO)
 
@@ -50,20 +144,57 @@ openrouter_client = AsyncOpenAI(
 )
 
 
-async def request_ai(system_prompt: str, user_prompt: str) -> str:
-    response = await openrouter_client.chat.completions.create(
-        model=settings.openrouter_model,
-        messages=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt},
-        ],
-        temperature=0.2,
+def has_excessive_repetition(text: str) -> bool:
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
+    if len(lines) < 20:
+        return False
+
+    counts = Counter(lines)
+    repeated_line_count = sum(count - 1 for count in counts.values() if count > 1)
+    unique_ratio = len(counts) / len(lines)
+    most_common_count = counts.most_common(1)[0][1]
+
+    return (
+        unique_ratio < 0.55
+        or repeated_line_count >= 10
+        or most_common_count >= 5
     )
 
-    content = response.choices[0].message.content
-    if not content:
-        raise RuntimeError("Модель вернула пустой ответ")
-    return content.strip()
+
+async def request_ai(system_prompt: str, user_prompt: str) -> str:
+    retry_instruction = (
+        "\n\nВАЖНО: предыдущая попытка содержала чрезмерные повторы. "
+        "Сформируй ответ заново, без повторяющихся строк и без внутреннего плана анализа."
+    )
+
+    for attempt in range(2):
+        current_user_prompt = user_prompt
+        if attempt == 1:
+            current_user_prompt += retry_instruction
+
+        response = await openrouter_client.chat.completions.create(
+            model=settings.openrouter_model,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": current_user_prompt},
+            ],
+            temperature=0.1,
+            max_tokens=8000,
+        )
+
+        content = response.choices[0].message.content
+        if not content:
+            raise RuntimeError("Модель вернула пустой ответ")
+
+        content = content.strip()
+        if not has_excessive_repetition(content):
+            return content
+
+        logging.warning("AI returned repetitive content, attempt %s", attempt + 1)
+
+    raise RuntimeError(
+        "Модель дважды вернула зацикленный ответ. Повторите запрос позже или выберите другую модель."
+    )
 
 
 async def send_long(message: types.Message, text: str) -> None:
@@ -80,6 +211,8 @@ async def show_ai_error(status: types.Message, exc: Exception) -> None:
         text = "❌ Не удалось подключиться к OpenRouter. Повторите запрос позже."
     elif isinstance(exc, APIStatusError):
         text = f"❌ Ошибка OpenRouter: HTTP {exc.status_code}."
+    elif isinstance(exc, RuntimeError):
+        text = f"❌ {exc}"
     else:
         text = f"❌ Ошибка генерации: {type(exc).__name__}"
 
@@ -202,7 +335,8 @@ async def review_handler(message: types.Message) -> None:
     status = await message.answer("🔍 ИИ проверяет проект через OpenRouter...")
     prompt = (
         f"Название проекта: {project.name}\n\n"
-        "Проведи строгое ревью следующего SwiftUI-проекта:\n\n"
+        "Проведи строгое ревью следующего SwiftUI-проекта. "
+        "Считай предоставленными только файлы и код, которые находятся ниже:\n\n"
         + project.generated_code
     )
 
