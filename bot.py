@@ -17,11 +17,7 @@ settings = load_settings()
 bot = Bot(token=settings.bot_token)
 dp = Dispatcher()
 store = ProjectStore()
-client = AsyncOpenAI(
-    api_key=settings.openrouter_api_key,
-    base_url="https://openrouter.ai/api/v1",
-    default_headers={"HTTP-Referer": "https://github.com/tahirovdd-lang/ios-agent-bot", "X-Title": "iOS Agent Bot"},
-)
+client = AsyncOpenAI(api_key=settings.openai_api_key)
 
 MANAGER_PROMPT = """Ты Senior iOS Engineer. Создай полноценный SwiftUI-проект на Swift 5.9+ с MVVM, NavigationStack и async/await. Не используй force unwrap, TODO, псевдокод и фразы об аналогичном коде. Сначала покажи дерево файлов, затем полный код каждого файла. Проверь импорты, типы, Binding, State, StateObject, EnvironmentObject и навигацию. Отвечай на русском. Не утверждай, что проект собран без фактической сборки."""
 REVIEW_PROMPT = """Ты Principal iOS Code Reviewer. Проверяй только предоставленный Swift-код, не придумывай файлы и номера строк. Не повторяй замечания. Разделы: критические ошибки, возможные проблемы, архитектура, стиль, производительность, безопасность. Таблица: | Severity | Файл | Строка | Проблема | Исправление |. В конце дай итог и степень готовности. Отвечай на русском."""
@@ -35,40 +31,36 @@ def repetitive(text: str) -> bool:
     return len(counts) / len(lines) < 0.55 or counts.most_common(1)[0][1] >= 5
 
 
-def answer_text(message) -> str:
-    content = getattr(message, "content", None)
-    if isinstance(content, str):
-        return content.strip()
-    if isinstance(content, list):
-        result = []
-        for item in content:
-            value = item.get("text") or item.get("content") if isinstance(item, dict) else getattr(item, "text", None)
-            if value:
-                result.append(str(value))
-        return "\n".join(result).strip()
+def response_text(response) -> str:
+    text = getattr(response, "output_text", None)
+    if isinstance(text, str):
+        return text.strip()
     return ""
 
 
 async def ask(prompt: str, task: str, model: str, max_tokens: int) -> str:
-    finish = "unknown"
+    status = "unknown"
     for attempt in range(3):
         suffix = "" if attempt == 0 else "\n\nВерни только полный финальный ответ."
-        response = await client.chat.completions.create(
+        response = await client.responses.create(
             model=model,
-            messages=[{"role": "system", "content": prompt}, {"role": "user", "content": task + suffix}],
-            temperature=0.1,
-            max_tokens=max_tokens,
-            extra_body={"reasoning": {"effort": "low", "exclude": True}},
+            instructions=prompt,
+            input=task + suffix,
+            max_output_tokens=max_tokens,
+            reasoning={"effort": "low"},
         )
-        if response.choices:
-            choice = response.choices[0]
-            finish = str(getattr(choice, "finish_reason", "unknown"))
-            text = answer_text(choice.message)
-            if text and not repetitive(text):
-                return text
-        logger.warning("Empty/repetitive response model=%s attempt=%s finish=%s", model, attempt + 1, finish)
+        status = str(getattr(response, "status", "unknown"))
+        text = response_text(response)
+        if text and not repetitive(text):
+            return text
+        logger.warning(
+            "Empty/repetitive OpenAI response model=%s attempt=%s status=%s",
+            model,
+            attempt + 1,
+            status,
+        )
         await asyncio.sleep(2 * (attempt + 1))
-    raise RuntimeError(f"Модель {model} не вернула готовый ответ. Причина: {finish}")
+    raise RuntimeError(f"Модель {model} не вернула готовый ответ. Статус: {status}")
 
 
 async def send_long(message: types.Message, text: str) -> None:
@@ -77,13 +69,13 @@ async def send_long(message: types.Message, text: str) -> None:
 
 
 async def show_error(status: types.Message, exc: Exception) -> None:
-    logger.exception("AI request failed")
+    logger.exception("OpenAI request failed")
     if isinstance(exc, RateLimitError):
-        text = "❌ OpenRouter ограничил запрос. Проверьте баланс."
+        text = "❌ OpenAI ограничил запрос. Проверьте баланс и лимиты API."
     elif isinstance(exc, APIConnectionError):
-        text = "❌ Нет соединения с OpenRouter."
+        text = "❌ Нет соединения с OpenAI."
     elif isinstance(exc, APIStatusError):
-        text = f"❌ Ошибка OpenRouter: HTTP {exc.status_code}."
+        text = f"❌ Ошибка OpenAI: HTTP {exc.status_code}."
     else:
         text = f"❌ {exc}"
     await status.edit_text(text)
@@ -93,7 +85,13 @@ def save_requirements(user_id: int, text: str, append: bool = False):
     project = store.get(user_id)
     if not project:
         return None
-    project.requirements = (project.requirements.rstrip() + "\n\nДополнительные требования:\n" + text.strip()) if append and project.requirements else text.strip()
+    project.requirements = (
+        project.requirements.rstrip()
+        + "\n\nДополнительные требования:\n"
+        + text.strip()
+        if append and project.requirements
+        else text.strip()
+    )
     project.generated_code = ""
     project.review = ""
     store.save(project)
@@ -102,7 +100,14 @@ def save_requirements(user_id: int, text: str, append: bool = False):
 
 @dp.message(CommandStart())
 async def start(message: types.Message) -> None:
-    await message.answer("👋 ИИ-помощник для iOS.\n/newproject Название\n/requirements Текст\n/status\n/generate — GPT-5\n/review — GPT-5 mini")
+    await message.answer(
+        "👋 ИИ-помощник для iOS.\n"
+        "/newproject Название\n"
+        "/requirements Текст\n"
+        "/status\n"
+        "/generate — GPT-5\n"
+        "/review — GPT-5 mini"
+    )
 
 
 @dp.message(Command("newproject"))
@@ -135,9 +140,13 @@ async def status(message: types.Message) -> None:
         await message.answer("Активного проекта нет. Используйте /newproject")
         return
     await message.answer(
-        f"📱 Проект: {project.name}\nТребования: {'есть' if project.requirements else 'нет'}\n"
-        f"Код: {'создан' if project.generated_code else 'не создан'}\nРевью: {'выполнено' if project.review else 'не выполнено'}\n"
-        f"Генерация: {settings.generate_model}\nПроверка: {settings.review_model}"
+        f"📱 Проект: {project.name}\n"
+        f"Требования: {'есть' if project.requirements else 'нет'}\n"
+        f"Код: {'создан' if project.generated_code else 'не создан'}\n"
+        f"Ревью: {'выполнено' if project.review else 'не выполнено'}\n"
+        f"Генерация: {settings.generate_model}\n"
+        f"Проверка: {settings.review_model}\n"
+        "Провайдер: OpenAI"
     )
 
 
@@ -147,10 +156,19 @@ async def generate(message: types.Message) -> None:
     if not project or not project.requirements:
         await message.answer("Сначала создайте проект и добавьте требования.")
         return
-    status_message = await message.answer(f"⏳ {settings.generate_model} создаёт код...")
-    task = f"Проект: {project.name}\nТребования: {project.requirements}\nСоздай полноценную рабочую MVP-версию и полный код всех файлов."
+    status_message = await message.answer(f"⏳ {settings.generate_model} создаёт код через OpenAI...")
+    task = (
+        f"Проект: {project.name}\n"
+        f"Требования: {project.requirements}\n"
+        "Создай полноценную рабочую MVP-версию и полный код всех файлов."
+    )
     try:
-        project.generated_code = await ask(MANAGER_PROMPT, task, settings.generate_model, 16000)
+        project.generated_code = await ask(
+            MANAGER_PROMPT,
+            task,
+            settings.generate_model,
+            16000,
+        )
         project.review = ""
         store.save(project)
         await status_message.delete()
@@ -165,10 +183,15 @@ async def review(message: types.Message) -> None:
     if not project or not project.generated_code:
         await message.answer("Сначала создайте код командой /generate")
         return
-    status_message = await message.answer(f"🔍 {settings.review_model} проверяет код...")
+    status_message = await message.answer(f"🔍 {settings.review_model} проверяет код через OpenAI...")
     task = f"Название проекта: {project.name}\nПроведи строгое ревью кода:\n\n{project.generated_code}"
     try:
-        project.review = await ask(REVIEW_PROMPT, task, settings.review_model, 8000)
+        project.review = await ask(
+            REVIEW_PROMPT,
+            task,
+            settings.review_model,
+            8000,
+        )
         store.save(project)
         await status_message.delete()
         await send_long(message, project.review)
@@ -194,7 +217,14 @@ async def text(message: types.Message) -> None:
 
 
 async def health(_: web.Request) -> web.Response:
-    return web.json_response({"status": "ok", "generate_model": settings.generate_model, "review_model": settings.review_model})
+    return web.json_response(
+        {
+            "status": "ok",
+            "provider": "openai",
+            "generate_model": settings.generate_model,
+            "review_model": settings.review_model,
+        }
+    )
 
 
 async def health_server() -> web.AppRunner:
@@ -203,7 +233,11 @@ async def health_server() -> web.AppRunner:
     app.router.add_get("/health", health)
     runner = web.AppRunner(app)
     await runner.setup()
-    await web.TCPSite(runner, "0.0.0.0", int(os.getenv("PORT", "3000"))).start()
+    await web.TCPSite(
+        runner,
+        "0.0.0.0",
+        int(os.getenv("PORT", "3000")),
+    ).start()
     return runner
 
 
