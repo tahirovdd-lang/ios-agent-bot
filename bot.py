@@ -32,35 +32,58 @@ def repetitive(text: str) -> bool:
 
 
 def response_text(response) -> str:
-    text = getattr(response, "output_text", None)
-    if isinstance(text, str):
-        return text.strip()
-    return ""
+    """Извлекает текст даже в версиях SDK, где output_text пустой."""
+    direct = getattr(response, "output_text", None)
+    if isinstance(direct, str) and direct.strip():
+        return direct.strip()
+
+    parts: list[str] = []
+    for output_item in getattr(response, "output", None) or []:
+        for content_item in getattr(output_item, "content", None) or []:
+            item_type = getattr(content_item, "type", "")
+            value = getattr(content_item, "text", None)
+            if item_type == "output_text" and isinstance(value, str) and value.strip():
+                parts.append(value.strip())
+                continue
+
+            refusal = getattr(content_item, "refusal", None)
+            if item_type == "refusal" and isinstance(refusal, str) and refusal.strip():
+                parts.append(f"OpenAI отказался выполнить запрос: {refusal.strip()}")
+
+    return "\n".join(parts).strip()
 
 
 async def ask(prompt: str, task: str, model: str, max_tokens: int) -> str:
     status = "unknown"
     for attempt in range(3):
-        suffix = "" if attempt == 0 else "\n\nВерни только полный финальный ответ."
+        suffix = "" if attempt == 0 else "\n\nВерни только полный финальный ответ обычным текстом."
         response = await client.responses.create(
             model=model,
             instructions=prompt,
             input=task + suffix,
             max_output_tokens=max_tokens,
             reasoning={"effort": "low"},
+            text={"format": {"type": "text"}},
         )
         status = str(getattr(response, "status", "unknown"))
         text = response_text(response)
         if text and not repetitive(text):
             return text
+
+        output_types = [
+            str(getattr(item, "type", "unknown"))
+            for item in (getattr(response, "output", None) or [])
+        ]
         logger.warning(
-            "Empty/repetitive OpenAI response model=%s attempt=%s status=%s",
+            "Empty/repetitive OpenAI response model=%s attempt=%s status=%s request_id=%s output_types=%s",
             model,
             attempt + 1,
             status,
+            getattr(response, "_request_id", "unknown"),
+            output_types,
         )
         await asyncio.sleep(2 * (attempt + 1))
-    raise RuntimeError(f"Модель {model} не вернула готовый ответ. Статус: {status}")
+    raise RuntimeError(f"Модель {model} завершила запрос, но текст ответа не найден. Статус: {status}")
 
 
 async def send_long(message: types.Message, text: str) -> None:
