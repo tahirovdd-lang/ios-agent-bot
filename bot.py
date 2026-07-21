@@ -1,5 +1,4 @@
 import asyncio
-import json
 import logging
 import os
 from collections import Counter
@@ -35,20 +34,22 @@ def repetitive(text: str) -> bool:
 
 def _as_dict(value: Any) -> Any:
     if isinstance(value, dict):
-        return value
-    if isinstance(value, list):
+        return {key: _as_dict(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
         return [_as_dict(item) for item in value]
+
     model_dump = getattr(value, "model_dump", None)
     if callable(model_dump):
         try:
-            return model_dump(mode="json")
+            return _as_dict(model_dump(mode="json"))
         except TypeError:
-            return model_dump()
+            return _as_dict(model_dump())
+
     return value
 
 
 def response_text(response: Any) -> str:
-    """Надёжно извлекает output_text из разных версий OpenAI SDK."""
+    """Извлекает текст из Responses API для разных версий OpenAI SDK."""
     direct = getattr(response, "output_text", None)
     if isinstance(direct, str) and direct.strip():
         return direct.strip()
@@ -62,12 +63,15 @@ def response_text(response: Any) -> str:
         return direct.strip()
 
     parts: list[str] = []
+
     for output_item in data.get("output") or []:
         if not isinstance(output_item, dict):
             continue
+
         for content_item in output_item.get("content") or []:
             if not isinstance(content_item, dict):
                 continue
+
             item_type = content_item.get("type")
             if item_type == "output_text":
                 value = content_item.get("text")
@@ -83,8 +87,9 @@ def response_text(response: Any) -> str:
 
 async def ask(prompt: str, task: str, model: str, max_tokens: int) -> str:
     status = "unknown"
+
     for attempt in range(2):
-        suffix = "" if attempt == 0 else "\n\nВерни финальный ответ обычным текстом без служебных сообщений."
+        suffix = "" if attempt == 0 else "\n\nВерни полный финальный ответ обычным текстом."
         response = await client.responses.create(
             model=model,
             instructions=prompt,
@@ -92,31 +97,45 @@ async def ask(prompt: str, task: str, model: str, max_tokens: int) -> str:
             max_output_tokens=max_tokens,
             reasoning={"effort": "low"},
         )
+
         status = str(getattr(response, "status", "unknown"))
         text = response_text(response)
+
         if text and not repetitive(text):
             return text
 
         data = _as_dict(response)
-        safe_debug = {
-            "id": data.get("id") if isinstance(data, dict) else None,
-            "status": data.get("status") if isinstance(data, dict) else status,
-            "output": data.get("output") if isinstance(data, dict) else None,
-            "incomplete_details": data.get("incomplete_details") if isinstance(data, dict) else None,
-            "error": data.get("error") if isinstance(data, dict) else None,
-        }
+        output_summary = []
+        if isinstance(data, dict):
+            for item in data.get("output") or []:
+                if not isinstance(item, dict):
+                    continue
+                output_summary.append(
+                    {
+                        "type": item.get("type"),
+                        "status": item.get("status"),
+                        "content_types": [
+                            part.get("type")
+                            for part in (item.get("content") or [])
+                            if isinstance(part, dict)
+                        ],
+                    }
+                )
+
         logger.warning(
-            "OpenAI response has no usable text model=%s attempt=%s data=%s",
+            "OpenAI response has no usable text model=%s attempt=%s status=%s request_id=%s output=%s",
             model,
             attempt + 1,
-            json.dumps(safe_debug, ensure_ascii=False, default=str)[:12000],
+            status,
+            getattr(response, "_request_id", "unknown"),
+            output_summary,
         )
-        await asyncio.sleep(2)
+
+        if attempt == 0:
+            await asyncio.sleep(2)
 
     raise RuntimeError(
-        f"Модель {model} завершила запрос, но текст ответа не найден. "
-        "Проверьте новую строку OpenAI response has no usable text в логах. "
-        f"Статус: {status}"
+        f"Модель {model} завершила запрос, но текст ответа не найден. Статус: {status}"
     )
 
 
@@ -213,12 +232,16 @@ async def generate(message: types.Message) -> None:
     if not project or not project.requirements:
         await message.answer("Сначала создайте проект и добавьте требования.")
         return
-    status_message = await message.answer(f"⏳ {settings.generate_model} создаёт код через OpenAI...")
+
+    status_message = await message.answer(
+        f"⏳ {settings.generate_model} создаёт код через OpenAI..."
+    )
     task = (
         f"Проект: {project.name}\n"
         f"Требования: {project.requirements}\n"
         "Создай полноценную рабочую MVP-версию и полный код всех файлов."
     )
+
     try:
         project.generated_code = await ask(
             MANAGER_PROMPT,
@@ -240,8 +263,15 @@ async def review(message: types.Message) -> None:
     if not project or not project.generated_code:
         await message.answer("Сначала создайте код командой /generate")
         return
-    status_message = await message.answer(f"🔍 {settings.review_model} проверяет код через OpenAI...")
-    task = f"Название проекта: {project.name}\nПроведи строгое ревью кода:\n\n{project.generated_code}"
+
+    status_message = await message.answer(
+        f"🔍 {settings.review_model} проверяет код через OpenAI..."
+    )
+    task = (
+        f"Название проекта: {project.name}\n"
+        f"Проведи строгое ревью кода:\n\n{project.generated_code}"
+    )
+
     try:
         project.review = await ask(
             REVIEW_PROMPT,
@@ -264,10 +294,12 @@ async def text(message: types.Message) -> None:
     if value.startswith("/"):
         await message.answer("❌ Неизвестная команда. Используйте /start")
         return
+
     project = store.get(message.from_user.id)
     if not project:
         await message.answer("Сначала создайте проект: /newproject Название")
         return
+
     append = bool(project.requirements)
     save_requirements(message.from_user.id, value, append)
     await message.answer("✅ Требования обновлены. Используйте /generate")
