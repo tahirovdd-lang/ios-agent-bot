@@ -23,7 +23,7 @@ struct PremiumRootView: View {
                 .tabItem { Label("Главная", systemImage: "house.fill") }
             NavigationStack { AnalyticsPremiumView() }
                 .tabItem { Label("Аналитика", systemImage: "chart.bar.fill") }
-            NavigationStack { DemoShiftView() }
+            NavigationStack { ShiftPremiumView() }
                 .tabItem { Label("Смена", systemImage: "lock.open.fill") }
             NavigationStack { DemoReceiptsView() }
                 .tabItem { Label("Чеки", systemImage: "doc.text.fill") }
