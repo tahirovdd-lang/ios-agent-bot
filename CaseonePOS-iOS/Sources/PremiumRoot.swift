@@ -21,7 +21,7 @@ struct PremiumRootView: View {
         TabView {
             NavigationStack { DashboardPremiumView() }
                 .tabItem { Label("Главная", systemImage: "house.fill") }
-            NavigationStack { DemoAnalyticsView() }
+            NavigationStack { AnalyticsPremiumView() }
                 .tabItem { Label("Аналитика", systemImage: "chart.bar.fill") }
             NavigationStack { DemoShiftView() }
                 .tabItem { Label("Смена", systemImage: "lock.open.fill") }
