@@ -1,0 +1,20 @@
+name: CaseonePOSManager
+options:
+  bundleIdPrefix: uz.caseonepos
+  deploymentTarget:
+    iOS: "17.0"
+targets:
+  CaseonePOSManager:
+    type: application
+    platform: iOS
+    sources:
+      - Sources
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: uz.caseonepos.manager
+        SWIFT_VERSION: 5.9
+        INFOPLIST_KEY_CFBundleDisplayName: CaseonePOS
+        GENERATE_INFOPLIST_FILE: YES
+        TARGETED_DEVICE_FAMILY: "1"
+    scheme:
+      testTargets: []
