@@ -4,7 +4,7 @@ import SwiftUI
 struct CaseonePOSManagerApp: App {
     var body: some Scene {
         WindowGroup {
-            ProductionAppEntryView()
+            PremiumAppEntryView()
                 .preferredColorScheme(.light)
         }
     }
