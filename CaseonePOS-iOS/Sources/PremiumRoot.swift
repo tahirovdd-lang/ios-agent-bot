@@ -29,6 +29,10 @@ struct PremiumRootView: View {
                 .tabItem { Label("Главная", systemImage: "house.fill") }
             NavigationStack { AnalyticsPremiumView() }
                 .tabItem { Label("Аналитика", systemImage: "chart.bar.fill") }
+            NavigationStack { RestaurantFloorView() }
+                .tabItem { Label("Столы", systemImage: "square.grid.3x3.fill") }
+            NavigationStack { KitchenDisplayView() }
+                .tabItem { Label("Кухня", systemImage: "frying.pan.fill") }
             NavigationStack { ShiftPremiumView() }
                 .tabItem { Label("Смена", systemImage: "lock.open.fill") }
             NavigationStack { ReceiptsPremiumView() }
