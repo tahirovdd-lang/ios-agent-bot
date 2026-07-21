@@ -101,7 +101,7 @@ async def ask(prompt: str, task: str, model: str, max_tokens: int) -> str:
         status = str(getattr(response, "status", "unknown"))
         text = response_text(response)
 
-        if text and not repetitive(text):
+        if text:
             return text
 
         data = _as_dict(response)
