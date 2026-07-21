@@ -1,0 +1,41 @@
+name: Fix repetitive response check
+
+on:
+  push:
+    paths:
+      - ".github/workflows/fix-repetitive-check.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Accept every non-empty OpenAI text response
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path("bot.py")
+          text = path.read_text(encoding="utf-8")
+          old = "if text and not repetitive(text):\n            return text"
+          new = "if text:\n            return text"
+
+          if old not in text:
+              raise SystemExit("Target code was not found in bot.py")
+
+          path.write_text(text.replace(old, new, 1), encoding="utf-8")
+          PY
+
+      - name: Commit fix
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add bot.py
+          git commit -m "Fix valid GPT-5 code being rejected as repetitive"
+          git push
