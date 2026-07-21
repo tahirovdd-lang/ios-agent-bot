@@ -25,7 +25,7 @@ struct PremiumRootView: View {
                 .tabItem { Label("Аналитика", systemImage: "chart.bar.fill") }
             NavigationStack { ShiftPremiumView() }
                 .tabItem { Label("Смена", systemImage: "lock.open.fill") }
-            NavigationStack { DemoReceiptsView() }
+            NavigationStack { ReceiptsPremiumView() }
                 .tabItem { Label("Чеки", systemImage: "doc.text.fill") }
             NavigationStack { DemoMoreView() }
                 .tabItem { Label("Ещё", systemImage: "square.grid.2x2.fill") }
