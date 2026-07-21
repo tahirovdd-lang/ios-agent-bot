@@ -18,8 +18,6 @@ final class SessionStore: ObservableObject {
         errorMessage = nil
         defer { isLoading = false }
 
-        // Демонстрационная авторизация. На этапе подключения API
-        // здесь будет POST /api/auth/login и сохранение токена в Keychain.
         try? await Task.sleep(for: .milliseconds(650))
         isAuthenticated = true
     }
@@ -144,7 +142,7 @@ struct LoginView: View {
 
             HStack {
                 Toggle("Запомнить меня", isOn: $rememberMe)
-                    .toggleStyle(.checkbox)
+                    .toggleStyle(CheckboxToggleStyle())
                     .font(.caption)
                 Spacer()
                 Button("Забыли пароль?") { }
@@ -222,8 +220,4 @@ private struct CheckboxToggleStyle: ToggleStyle {
         }
         .buttonStyle(.plain)
     }
-}
-
-private extension ToggleStyle where Self == CheckboxToggleStyle {
-    static var checkbox: CheckboxToggleStyle { CheckboxToggleStyle() }
 }
