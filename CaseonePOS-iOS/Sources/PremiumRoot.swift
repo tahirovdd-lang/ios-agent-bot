@@ -27,8 +27,8 @@ struct PremiumRootView: View {
                 .tabItem { Label("Смена", systemImage: "lock.open.fill") }
             NavigationStack { ReceiptsPremiumView() }
                 .tabItem { Label("Чеки", systemImage: "doc.text.fill") }
-            NavigationStack { DemoMoreView() }
-                .tabItem { Label("Ещё", systemImage: "square.grid.2x2.fill") }
+            NavigationStack { InventoryPremiumView() }
+                .tabItem { Label("Склад", systemImage: "shippingbox.fill") }
         }
         .tint(Color(red: 6/255, green: 133/255, blue: 98/255))
     }
