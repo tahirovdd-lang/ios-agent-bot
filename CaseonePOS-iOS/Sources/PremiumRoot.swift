@@ -25,7 +25,7 @@ struct PremiumAppEntryView: View {
 struct PremiumRootView: View {
     var body: some View {
         TabView {
-            NavigationStack { DashboardPremiumView() }
+            NavigationStack { LiveDashboardView() }
                 .tabItem { Label("Главная", systemImage: "house.fill") }
             NavigationStack { AnalyticsPremiumView() }
                 .tabItem { Label("Аналитика", systemImage: "chart.bar.fill") }
