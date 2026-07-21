@@ -2,6 +2,7 @@ import SwiftUI
 
 struct PremiumAppEntryView: View {
     @StateObject private var store = DemoAppStore()
+    @StateObject private var services = AppServices.live
 
     var body: some View {
         Group {
@@ -12,7 +13,12 @@ struct PremiumAppEntryView: View {
             }
         }
         .environmentObject(store)
+        .environmentObject(services)
         .animation(.easeInOut(duration: 0.25), value: store.signedIn)
+        .task(id: store.signedIn) {
+            guard store.signedIn else { return }
+            await services.refreshAll()
+        }
     }
 }
 
