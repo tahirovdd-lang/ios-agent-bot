@@ -35,8 +35,8 @@ struct PremiumRootView: View {
                 .tabItem { Label("Кухня", systemImage: "frying.pan.fill") }
             NavigationStack { ShiftPremiumView() }
                 .tabItem { Label("Смена", systemImage: "lock.open.fill") }
-            NavigationStack { ReceiptsPremiumView() }
-                .tabItem { Label("Чеки", systemImage: "doc.text.fill") }
+            NavigationStack { OrdersCenterPremiumView() }
+                .tabItem { Label("Заказы", systemImage: "list.clipboard.fill") }
             NavigationStack { InventoryPremiumView() }
                 .tabItem { Label("Склад", systemImage: "shippingbox.fill") }
             NavigationStack { MorePremiumView() }
