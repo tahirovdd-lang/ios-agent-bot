@@ -1,0 +1,108 @@
+name: Deploy CaseonePOS Web Demo
+
+on:
+  push:
+    branches:
+      - caseonepos-ios-app
+    paths:
+      - 'index.html'
+      - 'web/**'
+      - '.github/workflows/pages.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout CaseonePOS demo branch
+        uses: actions/checkout@v4
+        with:
+          ref: caseonepos-ios-app
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
+      - name: Prepare CaseonePOS site
+        run: |
+          set -e
+          rm -rf _site
+          mkdir -p _site
+          test -f web/secure-demo.html
+          test -f web/caseonepos-logo.b64
+          cp web/secure-demo.html _site/index.html
+          base64 --decode web/caseonepos-logo.b64 > _site/caseonepos-logo.jpg
+
+          python3 - <<'PY'
+          from pathlib import Path
+
+          page = Path('_site/index.html')
+          html = page.read_text(encoding='utf-8')
+
+          # Вход без ручного выбора роли: роль определяется PIN-кодом.
+          old_login = '''<div id="login" class="login"><div class="login-card"><div class="login-logo">C1</div><h1>CaseonePOS</h1><p>Выберите роль и введите PIN-код</p><div class="role-picker"><button id="directorRole" class="active" onclick="selectRole('director')">Директор</button><button id="waiterRole" onclick="selectRole('waiter')">Официант</button></div><input id="pin" class="pin" type="password" inputmode="numeric" maxlength="4" placeholder="••••"><div id="error" class="error"></div><button class="login-btn" onclick="loginUser()">Войти</button><p class="hint">Демо PIN: директор — 2580, официант — 1111</p></div></div>'''
+          new_login = '''<div id="login" class="login"><div class="login-card"><div class="login-logo"><img src="caseonepos-logo.jpg" alt="CaseonePOS"></div><h1>CaseonePOS</h1><p>Введите PIN-код</p><input id="pin" class="pin" type="password" inputmode="numeric" maxlength="4" autocomplete="off" autofocus placeholder="••••"><div id="error" class="error"></div><button class="login-btn" onclick="loginUser()">Войти</button></div></div>'''
+          if old_login not in html:
+              raise SystemExit('Original login block was not found')
+          html = html.replace(old_login, new_login, 1)
+
+          # Логотип в шапке и отсутствие текстовых подписей ролей.
+          html = html.replace(
+              '<div class="logo">C1</div>',
+              '<div class="logo"><img src="caseonepos-logo.jpg" alt="CaseonePOS"></div>',
+              1,
+          )
+          html = html.replace('<div id="roleBadge" class="role">Директор</div>', '')
+          html = html.replace('<div class="pill">Официант<br><b>Алишер</b></div>', '<div class="pill"><b>Алишер</b></div>')
+
+          extra_css = '''
+          .login-logo{background:linear-gradient(145deg,var(--d),var(--g));overflow:hidden;padding:8px}
+          .login-logo img{width:100%;height:100%;object-fit:contain;display:block;border-radius:13px}
+          .logo{overflow:hidden}
+          .logo img{width:100%;height:100%;object-fit:contain;display:block;padding:4px}
+          .head-actions{margin-left:auto}
+          '''
+          html = html.replace('</style>', extra_css + '</style>', 1)
+
+          # PIN 2580 открывает дашборд директора.
+          # PIN 1111 открывает отдельный дашборд официанта.
+          script_start = "let selectedRole='director',currentRole=null;const pinMap={director:'2580',waiter:'1111'};function selectRole(role){selectedRole=role;document.getElementById('directorRole').classList.toggle('active',role==='director');document.getElementById('waiterRole').classList.toggle('active',role==='waiter');document.getElementById('error').textContent='';document.getElementById('pin').value=''}function loginUser(){const pin=document.getElementById('pin').value;if(pin!==pinMap[selectedRole]){document.getElementById('error').textContent='Неверный PIN-код';return}currentRole=selectedRole;document.getElementById('login').classList.add('hidden');document.getElementById('app').classList.remove('hidden');applyRole()}function applyRole(){const director=currentRole==='director';document.getElementById('roleBadge').textContent=director?'Директор / управляющий':'Официант';document.getElementById('directorHero').classList.toggle('hidden',!director);document.getElementById('waiterHero').classList.toggle('hidden',director);document.getElementById('directorNav').classList.toggle('hidden',!director);document.getElementById('waiterNav').classList.toggle('hidden',director);document.querySelectorAll('.director-screen').forEach(x=>x.classList.toggle('hidden',!director));document.querySelectorAll('.waiter-screen').forEach(x=>x.classList.toggle('hidden',director));go(director?'indicators':'orders')}"
+          script_new = "let currentRole=null;const pinMap={director:'2580',waiter:'1111'};function loginUser(){const pin=document.getElementById('pin').value;const role=Object.keys(pinMap).find(key=>pinMap[key]===pin);if(!role){document.getElementById('error').textContent='Неверный PIN-код';return}currentRole=role;document.getElementById('error').textContent='';document.getElementById('login').classList.add('hidden');document.getElementById('app').classList.remove('hidden');applyRole()}function applyRole(){const director=currentRole==='director';document.getElementById('directorHero').classList.toggle('hidden',!director);document.getElementById('waiterHero').classList.toggle('hidden',director);document.getElementById('directorNav').classList.toggle('hidden',!director);document.getElementById('waiterNav').classList.toggle('hidden',director);document.querySelectorAll('.director-screen').forEach(x=>x.classList.toggle('hidden',!director));document.querySelectorAll('.waiter-screen').forEach(x=>x.classList.toggle('hidden',director));go(director?'indicators':'orders')}"
+          if script_start not in html:
+              raise SystemExit('Original role script was not found')
+          html = html.replace(script_start, script_new, 1)
+
+          page.write_text(html, encoding='utf-8')
+          PY
+
+          printf 'pin-role-separated-dashboards-v10' > _site/version.txt
+          touch _site/.nojekyll
+          grep -q 'Введите PIN-код' _site/index.html
+          grep -q 'caseonepos-logo.jpg' _site/index.html
+          grep -q "pinMap={director:'2580',waiter:'1111'}" _site/index.html
+          grep -q "go(director?'indicators':'orders')" _site/index.html
+          grep -q 'data-go="indicators"' _site/index.html
+          grep -q 'data-go="orders"' _site/index.html
+          if grep -q 'Выберите роль' _site/index.html; then exit 1; fi
+          if grep -q 'Демо PIN' _site/index.html; then exit 1; fi
+          if grep -q 'Директор / управляющий' _site/index.html; then exit 1; fi
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

@@ -1,0 +1,53 @@
+name: CaseonePOS iOS Build
+
+on:
+  push:
+    branches:
+      - caseonepos-ios-app
+    paths:
+      - "CaseonePOS-iOS/**"
+      - ".github/workflows/caseonepos-ios-build.yml"
+  pull_request:
+    paths:
+      - "CaseonePOS-iOS/**"
+      - ".github/workflows/caseonepos-ios-build.yml"
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode_16.2.app/Contents/Developer
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        working-directory: CaseonePOS-iOS
+        run: xcodegen generate
+
+      - name: Build for iPhone Simulator
+        working-directory: CaseonePOS-iOS
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -project CaseonePOSManager.xcodeproj \
+            -scheme CaseonePOSManager \
+            -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' \
+            CODE_SIGNING_ALLOWED=NO \
+            clean build | tee xcodebuild.log
+
+      - name: Upload build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: caseonepos-xcodebuild-log
+          path: CaseonePOS-iOS/xcodebuild.log
+          if-no-files-found: ignore
