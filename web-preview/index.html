@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#068562" />
+  <title>CaseonePOS — Demo</title>
+  <style>
+    :root{--green:#068562;--dark:#013f4a;--bg:#f3f7f6;--card:#fff;--muted:#6b7b78;--line:#dfe9e6;--orange:#ff9f43;--red:#e74c3c;--blue:#3b82f6;--shadow:0 14px 35px rgba(1,63,74,.10)}
+    *{box-sizing:border-box}body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;background:linear-gradient(145deg,#e7f4f0,#f8fbfa);color:#173531;min-height:100vh}
+    button,input{font:inherit}.app{max-width:430px;margin:auto;min-height:100vh;background:var(--bg);position:relative;box-shadow:0 0 50px rgba(0,0,0,.15);padding-bottom:92px;overflow:hidden}
+    .top{padding:calc(18px + env(safe-area-inset-top)) 20px 20px;background:linear-gradient(135deg,var(--dark),var(--green));color:white;border-radius:0 0 30px 30px}
+    .topline{display:flex;align-items:center;justify-content:space-between}.brand{display:flex;gap:12px;align-items:center}.logo{width:46px;height:46px;border-radius:15px;background:white;color:var(--green);font-weight:900;display:grid;place-items:center;box-shadow:0 8px 20px rgba(0,0,0,.15)}
+    .brand h1{font-size:20px;margin:0}.brand p{margin:3px 0 0;font-size:12px;opacity:.75}.avatar{width:42px;height:42px;border-radius:50%;background:#ffffff20;border:1px solid #ffffff45;display:grid;place-items:center;font-weight:700}
+    .hero{margin-top:20px;display:flex;justify-content:space-between;align-items:end}.hero small{opacity:.72}.hero strong{display:block;font-size:30px;margin-top:5px}.badge{background:#ffffff22;padding:9px 12px;border-radius:14px;font-size:12px}
+    main{padding:18px}.screen{display:none;animation:fade .22s ease}.screen.active{display:block}@keyframes fade{from{opacity:.3;transform:translateY(5px)}to{opacity:1;transform:none}}
+    .section-title{display:flex;align-items:center;justify-content:space-between;margin:6px 0 12px}.section-title h2{font-size:18px;margin:0}.section-title button{border:0;background:#e3f2ee;color:var(--green);padding:8px 11px;border-radius:12px;font-weight:700}
+    .grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}.card{background:var(--card);border:1px solid #edf3f1;border-radius:20px;padding:16px;box-shadow:var(--shadow)}.metric span{font-size:12px;color:var(--muted)}.metric strong{display:block;font-size:24px;margin:8px 0 4px}.metric em{font-size:11px;color:var(--green);font-style:normal}
+    .wide{grid-column:1/-1}.progress{height:8px;border-radius:10px;background:#e5efec;overflow:hidden;margin-top:12px}.progress i{display:block;height:100%;background:var(--green);border-radius:inherit}
+    .quick{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:18px}.quick button{border:0;background:white;border-radius:18px;padding:13px 4px;box-shadow:var(--shadow);color:var(--dark)}.quick b{font-size:22px;display:block;margin-bottom:5px}.quick span{font-size:10px}
+    .list{display:flex;flex-direction:column;gap:10px}.row{background:white;border-radius:17px;padding:13px;display:flex;align-items:center;gap:12px;border:1px solid #edf3f1}.icon{width:42px;height:42px;border-radius:14px;background:#e5f3ef;display:grid;place-items:center;font-size:20px}.row .grow{flex:1}.row h3{margin:0 0 4px;font-size:14px}.row p{margin:0;color:var(--muted);font-size:12px}.amount{font-weight:800;font-size:13px}.status{font-size:10px;padding:5px 8px;border-radius:10px;background:#e6f5ef;color:var(--green);font-weight:800}.status.orange{background:#fff0df;color:#d97706}.status.red{background:#fde8e6;color:#c0392b}.status.blue{background:#e8f1ff;color:#2563eb}
+    .filters{display:flex;gap:8px;overflow:auto;padding-bottom:8px}.filters button{white-space:nowrap;border:0;border-radius:13px;padding:9px 12px;background:white;color:var(--muted)}.filters button.active{background:var(--green);color:white}
+    .tables{display:grid;grid-template-columns:repeat(3,1fr);gap:11px}.table{border:0;background:white;border-radius:18px;min-height:100px;padding:12px;box-shadow:var(--shadow);text-align:left}.table strong{font-size:18px}.table small{display:block;margin-top:6px;color:var(--muted)}.table.busy{border:2px solid var(--orange)}.table.free{border:2px solid #a7dbc9}.table.bill{border:2px solid var(--blue)}
+    .kitchen-card{background:white;border-radius:19px;padding:14px;border-left:5px solid var(--green);box-shadow:var(--shadow)}.kitchen-card.late{border-left-color:var(--red)}.kitchen-card .meta{display:flex;justify-content:space-between;color:var(--muted);font-size:11px}.items{margin:11px 0;font-size:13px;line-height:1.65}.actions{display:flex;gap:8px}.actions button{flex:1;border:0;padding:10px;border-radius:12px;font-weight:800}.primary{background:var(--green);color:white}.secondary{background:#e8f1ef;color:var(--dark)}
+    .search{width:100%;border:1px solid var(--line);background:white;padding:12px 14px;border-radius:15px;outline:none;margin-bottom:12px}.chart{height:150px;display:flex;align-items:end;gap:10px;padding-top:20px}.bar{flex:1;background:linear-gradient(var(--green),#83cdb5);border-radius:10px 10px 4px 4px;position:relative}.bar span{position:absolute;bottom:-20px;width:100%;text-align:center;font-size:10px;color:var(--muted)}
+    .bottom{position:fixed;left:50%;transform:translateX(-50%);bottom:0;width:min(430px,100%);background:rgba(255,255,255,.94);backdrop-filter:blur(18px);display:grid;grid-template-columns:repeat(5,1fr);padding:8px 8px calc(8px + env(safe-area-inset-bottom));border-top:1px solid var(--line);z-index:10}.bottom button{border:0;background:transparent;color:#7a8b87;padding:8px 2px}.bottom b{display:block;font-size:20px}.bottom span{font-size:9px}.bottom button.active{color:var(--green)}
+    .toast{position:fixed;left:50%;bottom:100px;transform:translateX(-50%) translateY(20px);background:var(--dark);color:white;padding:12px 16px;border-radius:14px;font-size:12px;opacity:0;pointer-events:none;transition:.25s;z-index:20}.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+    @media(min-width:700px){body{padding:30px}.app{min-height:850px;border-radius:32px}.top{padding-top:24px}.bottom{bottom:30px;border-radius:0 0 32px 32px}}
+  </style>
+</head>
+<body>
+<div class="app">
+  <header class="top">
+    <div class="topline"><div class="brand"><div class="logo">C1</div><div><h1>CaseonePOS</h1><p>Ресторан Temurlan • онлайн</p></div></div><div class="avatar">ДТ</div></div>
+    <div class="hero"><div><small>Продажи сегодня</small><strong id="salesTotal">8 460 000 сум</strong></div><div class="badge">Смена открыта<br><b>08:24</b></div></div>
+  </header>
+  <main>
+    <section id="home" class="screen active">
+      <div class="quick"><button data-go="orders"><b>🧾</b><span>Новый заказ</span></button><button data-go="tables"><b>🪑</b><span>Столы</span></button><button data-go="kitchen"><b>👨‍🍳</b><span>Кухня</span></button><button onclick="toast('Отчёт сформирован')"><b>📊</b><span>Отчёт</span></button></div>
+      <div class="section-title"><h2>Обзор</h2><button onclick="toast('Данные обновлены')">Обновить</button></div>
+      <div class="grid">
+        <div class="card metric"><span>Чеков</span><strong>128</strong><em>↑ 12% к вчера</em></div>
+        <div class="card metric"><span>Средний чек</span><strong>66 094</strong><em>↑ 4,8%</em></div>
+        <div class="card metric"><span>Наличные</span><strong>3,2 млн</strong><div class="progress"><i style="width:38%"></i></div></div>
+        <div class="card metric"><span>Карты</span><strong>5,26 млн</strong><div class="progress"><i style="width:62%"></i></div></div>
+        <div class="card wide"><div class="section-title"><h2>Продажи по часам</h2><span class="status">Сегодня</span></div><div class="chart"><div class="bar" style="height:32%"><span>10</span></div><div class="bar" style="height:52%"><span>12</span></div><div class="bar" style="height:83%"><span>14</span></div><div class="bar" style="height:61%"><span>16</span></div><div class="bar" style="height:92%"><span>18</span></div><div class="bar" style="height:70%"><span>20</span></div></div></div>
+      </div>
+      <div class="section-title" style="margin-top:22px"><h2>Последние операции</h2></div>
+      <div class="list"><div class="row"><div class="icon">🧾</div><div class="grow"><h3>Чек №1048 • Стол 7</h3><p>Humo • 6 позиций</p></div><div class="amount">384 000</div></div><div class="row"><div class="icon">🚚</div><div class="grow"><h3>Доставка №1047</h3><p>Наличные • 4 позиции</p></div><div class="amount">218 000</div></div></div>
+    </section>
+
+    <section id="orders" class="screen">
+      <div class="section-title"><h2>Заказы</h2><button onclick="toast('Новый заказ создан')">+ Создать</button></div>
+      <input class="search" placeholder="Поиск по номеру, столу, сотруднику" />
+      <div class="filters"><button class="active">Все 24</button><button>Новые 5</button><button>Готовятся 8</button><button>Готовы 3</button></div>
+      <div class="list" style="margin-top:8px">
+        <div class="row"><div class="icon">🍽️</div><div class="grow"><h3>№1052 • Стол 12</h3><p>Алишер • 00:18 • 7 позиций</p><span class="status orange">Готовится</span></div><div class="amount">452 000</div></div>
+        <div class="row"><div class="icon">🛍️</div><div class="grow"><h3>№1051 • Самовывоз</h3><p>Далер • 00:07 • 3 позиции</p><span class="status blue">Новый</span></div><div class="amount">164 000</div></div>
+        <div class="row"><div class="icon">🚚</div><div class="grow"><h3>№1050 • Доставка</h3><p>Шохрух • 00:26 • 5 позиций</p><span class="status">Готов</span></div><div class="amount">318 000</div></div>
+        <div class="row"><div class="icon">💳</div><div class="grow"><h3>№1049 • Стол 4</h3><p>Мадина • ожидает оплату</p><span class="status red">Оплата</span></div><div class="amount">706 000</div></div>
+      </div>
+    </section>
+
+    <section id="tables" class="screen">
+      <div class="section-title"><h2>План зала</h2><button onclick="toast('Редактор зала открыт')">Изменить</button></div>
+      <div class="filters"><button class="active">Основной зал</button><button>VIP</button><button>Терраса</button></div>
+      <div class="tables" style="margin-top:12px">
+        <button class="table busy" onclick="toast('Стол 1: заказ 245 000 сум')"><strong>1</strong><small>Занят • 32 мин</small></button>
+        <button class="table free" onclick="toast('Стол 2 свободен')"><strong>2</strong><small>Свободен</small></button>
+        <button class="table bill" onclick="toast('Стол 3 ожидает счёт')"><strong>3</strong><small>Счёт • 410 000</small></button>
+        <button class="table busy"><strong>4</strong><small>Занят • 18 мин</small></button><button class="table free"><strong>5</strong><small>Свободен</small></button><button class="table busy"><strong>6</strong><small>Занят • 41 мин</small></button><button class="table busy"><strong>7</strong><small>Занят • 12 мин</small></button><button class="table free"><strong>8</strong><small>Свободен</small></button><button class="table bill"><strong>9</strong><small>Счёт • 286 000</small></button>
+      </div>
+    </section>
+
+    <section id="kitchen" class="screen">
+      <div class="section-title"><h2>Кухня</h2><button onclick="toast('Все заказы обновлены')">Обновить</button></div>
+      <div class="filters"><button class="active">Все цеха</button><button>Горячий</button><button>Мангал</button><button>Бар</button></div>
+      <div class="list" style="margin-top:12px">
+        <div class="kitchen-card late"><div class="meta"><b>№1044 • Стол 9</b><span>28 мин ⚠️</span></div><div class="items">2× Стейк рибай<br>1× Овощи на мангале<br>1× Картофель фри</div><div class="actions"><button class="secondary" onclick="toast('Заказ приостановлен')">Пауза</button><button class="primary" onclick="toast('Заказ №1044 готов')">Готово</button></div></div>
+        <div class="kitchen-card"><div class="meta"><b>№1052 • Стол 12</b><span>14 мин</span></div><div class="items">1× Плов 1 порция<br>2× Ачичук<br>1× Лепёшка</div><div class="actions"><button class="secondary">Комментарий</button><button class="primary" onclick="toast('Заказ №1052 готов')">Готово</button></div></div>
+        <div class="kitchen-card"><div class="meta"><b>№1051 • Самовывоз</b><span>7 мин</span></div><div class="items">2× Бургер<br>1× Айс американо</div><div class="actions"><button class="secondary">Комментарий</button><button class="primary" onclick="toast('Заказ №1051 готов')">Готово</button></div></div>
+      </div>
+    </section>
+
+    <section id="more" class="screen">
+      <div class="section-title"><h2>Управление</h2></div>
+      <div class="list"><div class="row"><div class="icon">📦</div><div class="grow"><h3>Склад</h3><p>7 товаров с низким остатком</p></div><span class="status red">7</span></div><div class="row"><div class="icon">👥</div><div class="grow"><h3>Сотрудники</h3><p>14 на смене • 3 отсутствуют</p></div></div><div class="row"><div class="icon">🔔</div><div class="grow"><h3>Уведомления</h3><p>Просрочки кухни и возвраты</p></div><span class="status orange">4</span></div><div class="row"><div class="icon">⚙️</div><div class="grow"><h3>Настройки</h3><p>Филиал, кассы, способы оплаты</p></div></div></div>
+      <div class="section-title" style="margin-top:22px"><h2>Состояние системы</h2></div>
+      <div class="card"><div class="row" style="padding:0;border:0"><div class="icon">☁️</div><div class="grow"><h3>Синхронизация</h3><p>Последнее обновление: только что</p></div><span class="status">Онлайн</span></div></div>
+    </section>
+  </main>
+  <nav class="bottom"><button class="active" data-target="home"><b>⌂</b><span>Главная</span></button><button data-target="orders"><b>🧾</b><span>Заказы</span></button><button data-target="tables"><b>▦</b><span>Столы</span></button><button data-target="kitchen"><b>♨</b><span>Кухня</span></button><button data-target="more"><b>•••</b><span>Ещё</span></button></nav>
+</div>
+<div id="toast" class="toast"></div>
+<script>
+  const screens=[...document.querySelectorAll('.screen')], nav=[...document.querySelectorAll('.bottom button')];
+  function openScreen(id){screens.forEach(s=>s.classList.toggle('active',s.id===id));nav.forEach(b=>b.classList.toggle('active',b.dataset.target===id));window.scrollTo({top:0,behavior:'smooth'});}
+  nav.forEach(b=>b.onclick=()=>openScreen(b.dataset.target));document.querySelectorAll('[data-go]').forEach(b=>b.onclick=()=>openScreen(b.dataset.go));
+  document.querySelectorAll('.filters').forEach(group=>group.querySelectorAll('button').forEach(btn=>btn.onclick=()=>{group.querySelectorAll('button').forEach(x=>x.classList.remove('active'));btn.classList.add('active')}));
+  function toast(text){const el=document.getElementById('toast');el.textContent=text;el.classList.add('show');clearTimeout(window.t);window.t=setTimeout(()=>el.classList.remove('show'),1800)}
+</script>
+</body>
+</html>
