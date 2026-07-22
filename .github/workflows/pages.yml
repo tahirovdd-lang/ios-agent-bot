@@ -26,7 +26,7 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout role-based demo branch
+      - name: Checkout CaseonePOS demo branch
         uses: actions/checkout@v4
         with:
           ref: caseonepos-ios-app
@@ -34,26 +34,44 @@ jobs:
       - name: Configure Pages
         uses: actions/configure-pages@v5
 
-      - name: Prepare protected CaseonePOS site
+      - name: Prepare CaseonePOS site
         run: |
           set -e
           rm -rf _site
           mkdir -p _site
           test -f web/secure-demo.html
+          test -f web/caseonepos-logo.b64
           cp web/secure-demo.html _site/index.html
+          base64 --decode web/caseonepos-logo.b64 > _site/caseonepos-logo.jpg
 
-          # Убираем отображение роли из шапки, не меняя дизайн и цвета.
-          sed -i 's#\.role{font-size:11px;#.role{display:none;font-size:11px;#' _site/index.html
-          sed -i 's#<div class="pill">Официант<br><b>Алишер</b></div>#<div class="pill"><b>Алишер</b></div>#' _site/index.html
+          python3 - <<'PY'
+          from pathlib import Path
 
-          # Повышаем читаемость подписей нижнего меню без изменения цвета.
-          sed -i 's#\.bottom span{font-size:9px}#.bottom span{font-size:9px;font-weight:600}#' _site/index.html
+          page = Path('_site/index.html')
+          html = page.read_text(encoding='utf-8')
 
-          printf 'role-header-nav-v4' > _site/version.txt
+          html = html.replace(
+              '<div class="login-logo">C1</div>',
+              '<div class="login-logo"><img src="caseonepos-logo.jpg" alt="CaseonePOS"></div>',
+          )
+          html = html.replace(
+              '<div class="logo">C1</div>',
+              '<div class="logo"><img src="caseonepos-logo.jpg" alt="CaseonePOS"></div>',
+          )
+          html = html.replace(
+              '</style>',
+              '.login-logo,.logo{overflow:hidden}.login-logo img,.logo img{width:100%;height:100%;object-fit:contain;padding:4px}</style>',
+              1,
+          )
+
+          page.write_text(html, encoding='utf-8')
+          PY
+
+          printf 'full-demo-logo-only-v7' > _site/version.txt
           touch _site/.nojekyll
           grep -q 'Выберите роль и введите PIN-код' _site/index.html
-          grep -q '.role{display:none' _site/index.html
-          grep -q '.bottom span{font-size:9px;font-weight:600}' _site/index.html
+          grep -q 'caseonepos-logo.jpg' _site/index.html
+          if grep -q '>C1<' _site/index.html; then exit 1; fi
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
