@@ -46,88 +46,60 @@ jobs:
 
           python3 - <<'PY'
           from pathlib import Path
-          import re
 
           page = Path('_site/index.html')
           html = page.read_text(encoding='utf-8')
 
-          # Меняем только отметки C1 на настоящий логотип.
-          html = html.replace(
-              '<div class="login-logo">C1</div>',
-              '<div class="login-logo"><img src="caseonepos-logo.jpg" alt="CaseonePOS"></div>',
-          )
+          # Экран входа: зелёная подложка с настоящим логотипом,
+          # без выбора роли и без демо-подсказки.
+          old_login = '''<div id="login" class="login"><div class="login-card"><div class="login-logo">C1</div><h1>CaseonePOS</h1><p>Выберите роль и введите PIN-код</p><div class="role-picker"><button id="directorRole" class="active" onclick="selectRole('director')">Директор</button><button id="waiterRole" onclick="selectRole('waiter')">Официант</button></div><input id="pin" class="pin" type="password" inputmode="numeric" maxlength="4" placeholder="••••"><div id="error" class="error"></div><button class="login-btn" onclick="loginUser()">Войти</button><p class="hint">Демо PIN: директор — 2580, официант — 1111</p></div></div>'''
+          new_login = '''<div id="login" class="login"><div class="login-card"><div class="login-logo"><img src="caseonepos-logo.jpg" alt="CaseonePOS"></div><h1>CaseonePOS</h1><p>Введите PIN-код</p><input id="pin" class="pin" type="password" inputmode="numeric" maxlength="4" autocomplete="off" autofocus placeholder="••••"><div id="error" class="error"></div><button class="login-btn" onclick="loginUser()">Войти</button></div></div>'''
+          if old_login not in html:
+              raise SystemExit('Original login block was not found')
+          html = html.replace(old_login, new_login, 1)
+
+          # Настоящий логотип в шапке. Ролевые подписи полностью убраны.
           html = html.replace(
               '<div class="logo">C1</div>',
               '<div class="logo"><img src="caseonepos-logo.jpg" alt="CaseonePOS"></div>',
+              1,
           )
+          html = html.replace('<div id="roleBadge" class="role">Директор</div>', '')
+          html = html.replace('<div class="pill">Официант<br><b>Алишер</b></div>', '<div class="pill"><b>Алишер</b></div>')
 
+          # Логотип остаётся поверх красивой зелёной подложки.
           extra_css = '''
-          .login-logo,.logo{overflow:hidden}
-          .login-logo img,.logo img{width:100%;height:100%;object-fit:contain;padding:4px}
-          .report-list{display:flex;flex-direction:column;gap:9px}
-          .report-item{width:100%;border:1px solid #e9f0ee;background:#fff;border-radius:16px;padding:15px;display:flex;align-items:center;gap:12px;text-align:left;color:#163b35;box-shadow:0 10px 24px #073f4712}
-          .report-item .grow{font-size:14px;font-weight:700}
-          .report-item .info{width:26px;height:26px;border:2px solid #67acd5;color:#4196ca;border-radius:50%;display:grid;place-items:center;font-weight:900;font-size:14px}
-          .report-item .arrow{font-size:23px;color:#8aa5a0}
-          .simple-panel{background:#fff;border:1px solid #e9f0ee;border-radius:19px;padding:18px;box-shadow:0 10px 24px #073f4712;margin-bottom:12px}
+          .login-logo{background:linear-gradient(145deg,var(--d),var(--g));overflow:hidden;padding:8px}
+          .login-logo img{width:100%;height:100%;object-fit:contain;display:block;border-radius:13px}
+          .logo{overflow:hidden}
+          .logo img{width:100%;height:100%;object-fit:contain;display:block;padding:4px}
+          .head-actions{margin-left:auto}
           '''
           html = html.replace('</style>', extra_css + '</style>', 1)
 
-          new_sections = '''
-          <section id="reports" class="screen director-screen">
-            <div class="title"><h2>Отчёты</h2></div>
-            <div class="report-list">
-              <button class="report-item" onclick="toast('Выручка по официантам')"><span class="grow">Выручка по официантам</span><span class="info">i</span><span class="arrow">›</span></button>
-              <button class="report-item" onclick="toast('Выручка по кассам и типам оплат')"><span class="grow">Выручка по кассам и типам оплат</span><span class="info">i</span><span class="arrow">›</span></button>
-              <button class="report-item" onclick="toast('Выручка по залам')"><span class="grow">Выручка по залам</span><span class="info">i</span><span class="arrow">›</span></button>
-              <button class="report-item" onclick="toast('Выручка по столам')"><span class="grow">Выручка по столам</span><span class="info">i</span><span class="arrow">›</span></button>
-              <button class="report-item" onclick="toast('Заказы')"><span class="grow">Заказы</span><span class="info">i</span><span class="arrow">›</span></button>
-              <button class="report-item" onclick="toast('Продажи блюд по группам')"><span class="grow">Продажи блюд по группам</span><span class="info">i</span><span class="arrow">›</span></button>
-              <button class="report-item" onclick="toast('Продажи по часам')"><span class="grow">Продажи по часам</span><span class="info">i</span><span class="arrow">›</span></button>
-              <button class="report-item" onclick="toast('Продажи по категориям')"><span class="grow">Продажи по категориям</span><span class="info">i</span><span class="arrow">›</span></button>
-              <button class="report-item" onclick="toast('Отчёт о прибылях и убытках')"><span class="grow">Отчёт о прибылях и убытках</span><span class="info">i</span><span class="arrow">›</span></button>
-              <button class="report-item" onclick="toast('Наличность в кассах')"><span class="grow">Наличность в кассах</span><span class="info">i</span><span class="arrow">›</span></button>
-              <button class="report-item" onclick="toast('Контроль себестоимости блюд')"><span class="grow">Контроль себестоимости блюд</span><span class="info">i</span><span class="arrow">›</span></button>
-              <button class="report-item" onclick="toast('Приходы от поставщиков')"><span class="grow">Приходы от поставщиков</span><span class="info">i</span><span class="arrow">›</span></button>
-              <button class="report-item" onclick="toast('Анализ закупочных цен')"><span class="grow">Анализ закупочных цен по поставщикам</span><span class="info">i</span><span class="arrow">›</span></button>
-            </div>
-          </section>
-          <section id="extensions" class="screen director-screen">
-            <div class="title"><h2>Расширения</h2></div>
-            <div class="simple-panel"><h3>Дополнительные модули</h3><p>Подключение интеграций и дополнительных возможностей CaseonePOS.</p></div>
-          </section>
-          <section id="settings" class="screen director-screen">
-            <div class="title"><h2>Настройки</h2></div>
-            <div class="simple-panel"><h3>Настройки приложения</h3><p>Параметры заведения, сотрудников, ролей и уведомлений.</p></div>
-          </section>
-          '''
-          if 'id="reports"' not in html:
-              html = html.replace('</main>', new_sections + '</main>', 1)
-
-          new_nav = '''<nav id="directorNav" class="bottom">
-            <button class="active" onclick="showScreen('indicators',this)"><b>▥</b><span>Показатели</span></button>
-            <button onclick="showScreen('ratings',this)"><b>★</b><span>Рейтинги</span></button>
-            <button onclick="showScreen('reports',this)"><b>▦</b><span>Отчёты</span></button>
-            <button onclick="showScreen('extensions',this)"><b>➤</b><span>Расширения</span></button>
-            <button onclick="showScreen('settings',this)"><b>⚙</b><span>Настройки</span></button>
-          </nav>'''
-          html, count = re.subn(r'<nav id="directorNav"[^>]*>.*?</nav>', new_nav, html, count=1, flags=re.S)
-          if count == 0:
-              html, count = re.subn(r'<div id="directorNav"[^>]*>.*?</div>', new_nav, html, count=1, flags=re.S)
-          if count == 0:
-              raise SystemExit('Director navigation was not found')
+          # Вход без выбора роли. Оба прежних PIN-кода открывают полный интерфейс
+          # с пятью рабочими нижними вкладками.
+          script_start = "let selectedRole='director',currentRole=null;const pinMap={director:'2580',waiter:'1111'};function selectRole(role){selectedRole=role;document.getElementById('directorRole').classList.toggle('active',role==='director');document.getElementById('waiterRole').classList.toggle('active',role==='waiter');document.getElementById('error').textContent='';document.getElementById('pin').value=''}function loginUser(){const pin=document.getElementById('pin').value;if(pin!==pinMap[selectedRole]){document.getElementById('error').textContent='Неверный PIN-код';return}currentRole=selectedRole;document.getElementById('login').classList.add('hidden');document.getElementById('app').classList.remove('hidden');applyRole()}function applyRole(){const director=currentRole==='director';document.getElementById('roleBadge').textContent=director?'Директор / управляющий':'Официант';document.getElementById('directorHero').classList.toggle('hidden',!director);document.getElementById('waiterHero').classList.toggle('hidden',director);document.getElementById('directorNav').classList.toggle('hidden',!director);document.getElementById('waiterNav').classList.toggle('hidden',director);document.querySelectorAll('.director-screen').forEach(x=>x.classList.toggle('hidden',!director));document.querySelectorAll('.waiter-screen').forEach(x=>x.classList.toggle('hidden',director));go(director?'indicators':'orders')}"
+          script_new = "let currentRole='director';const validPins=['2580','1111'];function loginUser(){const pin=document.getElementById('pin').value;if(!validPins.includes(pin)){document.getElementById('error').textContent='Неверный PIN-код';return}document.getElementById('error').textContent='';document.getElementById('login').classList.add('hidden');document.getElementById('app').classList.remove('hidden');applyRole()}function applyRole(){document.getElementById('directorHero').classList.remove('hidden');document.getElementById('waiterHero').classList.add('hidden');document.getElementById('directorNav').classList.remove('hidden');document.getElementById('waiterNav').classList.add('hidden');document.querySelectorAll('.director-screen').forEach(x=>x.classList.remove('hidden'));document.querySelectorAll('.waiter-screen').forEach(x=>x.classList.add('hidden'));go('indicators')}"
+          if script_start not in html:
+              raise SystemExit('Original role script was not found')
+          html = html.replace(script_start, script_new, 1)
 
           page.write_text(html, encoding='utf-8')
           PY
 
-          printf 'restored-five-tabs-v8' > _site/version.txt
+          printf 'original-restored-pin-only-five-tabs-v9' > _site/version.txt
           touch _site/.nojekyll
-          grep -q 'Показатели' _site/index.html
-          grep -q 'Рейтинги' _site/index.html
-          grep -q 'Отчёты' _site/index.html
-          grep -q 'Расширения' _site/index.html
-          grep -q 'Настройки' _site/index.html
+          grep -q 'Введите PIN-код' _site/index.html
           grep -q 'caseonepos-logo.jpg' _site/index.html
+          grep -q 'data-go="indicators"' _site/index.html
+          grep -q 'data-go="ratings"' _site/index.html
+          grep -q 'data-go="reports"' _site/index.html
+          grep -q 'data-go="extensions"' _site/index.html
+          grep -q 'data-go="settings"' _site/index.html
+          if grep -q 'Выберите роль' _site/index.html; then exit 1; fi
+          if grep -q 'Демо PIN' _site/index.html; then exit 1; fi
+          if grep -q 'Директор / управляющий' _site/index.html; then exit 1; fi
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
