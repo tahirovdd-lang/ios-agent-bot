@@ -35,12 +35,12 @@ jobs:
       - name: Prepare static site
         run: |
           mkdir -p _site
-          if [ -f index.html ]; then
+          if [ -f web/secure-demo.html ]; then
+            cp web/secure-demo.html _site/index.html
+          elif [ -f index.html ]; then
             cp index.html _site/index.html
-          elif [ -f web/index.html ]; then
-            cp -R web/. _site/
           else
-            echo 'index.html not found'
+            echo 'CaseonePOS demo file not found'
             exit 1
           fi
           touch _site/.nojekyll
