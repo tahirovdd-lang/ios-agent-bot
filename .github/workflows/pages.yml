@@ -26,24 +26,26 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
+      - name: Checkout role-based demo branch
         uses: actions/checkout@v4
+        with:
+          ref: caseonepos-ios-app
 
       - name: Configure Pages
         uses: actions/configure-pages@v5
 
-      - name: Prepare static site
+      - name: Prepare protected CaseonePOS site
         run: |
+          set -e
+          rm -rf _site
           mkdir -p _site
-          if [ -f web/secure-demo.html ]; then
-            cp web/secure-demo.html _site/index.html
-          elif [ -f index.html ]; then
-            cp index.html _site/index.html
-          else
-            echo 'CaseonePOS demo file not found'
-            exit 1
-          fi
+          test -f web/secure-demo.html
+          cp web/secure-demo.html _site/index.html
+          printf 'role-pin-v2' > _site/version.txt
           touch _site/.nojekyll
+          grep -q 'Выберите роль и введите PIN-код' _site/index.html
+          grep -q 'Директор' _site/index.html
+          grep -q 'Официант' _site/index.html
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
